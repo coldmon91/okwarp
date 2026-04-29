@@ -632,7 +632,7 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
       warp_send_json_message "{\"hook\": \"Clear\", \"value\": {}}"
   }
 
-  function warp_finish_update {
+  function swarf_finish_update {
     local update_id="$1"
     warp_send_json_message "{ \"hook\": \"FinishUpdate\", \"value\": { \"update_id\": \"$update_id\"} }"
   }
@@ -644,7 +644,7 @@ if [[ -z $WARP_BOOTSTRAPPED ]]; then
   # The `.sources` file could only exist if a user manually created it; Ubuntu doesn't create one automatically for the
   # warp source file due to a bug in its update flow where it considers our source file to be "invalid" because it
   # contains a `signed-by` key.
-  function warp_handle_dist_upgrade {
+  function swarf_handle_dist_upgrade {
       local source_file_name="$1"
 
       eval "$(command apt-config shell APT_SOURCESDIR 'Dir::Etc::sourceparts/d')"

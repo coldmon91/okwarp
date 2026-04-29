@@ -2,10 +2,10 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 #include "environment.iss"
 
-#define MyAppPublisher "Denver Technologies, Inc."
-#define MyAppURL "https://www.warp.dev/"
+#define MyAppPublisher "Swarf contributors"
+#define MyAppURL "https://example.invalid/swarf/"
 #ifndef MyAppName
-  #define MyAppName "WarpDev"
+  #define MyAppName "SwarfDev"
 #endif
 #ifndef MyAppVersion
   #define MyAppVersion "0.1.0"
@@ -30,13 +30,13 @@
   ((ReleaseChannel == "integration") ? "Integration" : \
   ((ReleaseChannel == "oss") ? "Oss" : \
   "Unknown")))))
-#define AppMutexName "Local\Warp" + ChannelPascalCase + "_SingleInstance"
+#define AppMutexName "Local\Swarf" + ChannelPascalCase + "_SingleInstance"
 
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
-AppId=warp-terminal-{#ReleaseChannel}
+AppId=swarf-terminal-{#ReleaseChannel}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
@@ -61,14 +61,14 @@ WizardSmallImageFile="installer-images\warp-logo.bmp"
 WizardImageFile="installer-images\warp-banner.bmp"
 SetupIconFile="..\..\app\channels\{#ReleaseChannel}\icon\no-padding\icon.ico"
 UninstallDisplayIcon="{app}\icon.ico"
-; Force close previous Warp if it hasn't shut down yet.
+; Force close previous Swarf if it hasn't shut down yet.
 ; In the update flow we already warn the user if they have something running and make them confirm
 ; before running this installer. Therefore, we are good to force close Warp without fear of losing
 ; unsaved work.
 ; VSCode does something similar:
 ; https://github.com/microsoft/vscode/blob/aac9914f93551f894b8df1e4680bd847e7636be3/build/win32/code.iss#L41
 CloseApplications=force
-; For manual installs: if Warp is running, show a dialog prompting the user to close it
+; For manual installs: if Swarf is running, show a dialog prompting the user to close it
 ; before Setup proceeds. Returned empty for background updates so the check is skipped.
 ; TODO(andy) uncomment this after the 4/22 release
 ;AppMutex={code:GetAppMutex}
@@ -191,7 +191,7 @@ begin
   begin
     if IsBackgroundUpdate() then
     begin
-      Log('Background update: waiting for Warp to exit (mutex: {#AppMutexName})...');
+      Log('Background update: waiting for Swarf to exit (mutex: {#AppMutexName})...');
       WaitCounter := 0;
       while CheckForMutexes('{#AppMutexName}') and (WaitCounter < 30) do
       begin

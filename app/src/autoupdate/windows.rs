@@ -22,7 +22,7 @@ lazy_static! {
     static ref INSTALLER_PATH: Arc<Mutex<Option<TempPath>>> = Default::default();
 }
 
-/// Download the Inno Setup install wizard, the same one users run on the first Warp install, and
+/// Download the Inno Setup install wizard, the same one users run on the first Swarf install, and
 /// place it into the "data dir".
 pub(super) async fn download_update_and_cleanup(
     version_info: &VersionInfo,
@@ -201,7 +201,7 @@ pub(super) fn relaunch() -> Result<()> {
         }
     };
 
-    // The Inno Setup install wizard will run without user input. It will re-launch Warp after
+    // The Inno Setup install wizard will run without user input. It will re-launch Swarf after
     // installing the update files.
     // https://jrsoftware.org/ishelp/index.php?topic=setupcmdline
     Command::new(&installer_path)
@@ -218,8 +218,8 @@ pub(super) fn relaunch() -> Result<()> {
             "/NORESTART",
             &log_arg,
             "/update=1",
-            // Do not forcibly kill Warp via RestartManager. The installer will wait for
-            // Warp to exit naturally by polling the single-instance mutex instead.
+            // Do not forcibly kill Swarf via RestartManager. The installer will wait for
+            // Swarf to exit naturally by polling the single-instance mutex instead.
             "/NOCLOSEAPPLICATIONS",
             &format!("/DIR={}", install_dir.display()),
         ])
@@ -239,8 +239,8 @@ pub(super) fn relaunch() -> Result<()> {
 fn installer_file_name() -> Result<String> {
     let app_name_prefix = app_name_prefix(ChannelState::channel());
 
-    // For example, on arm64 this is WarpSetup-arm64.exe and on x64 this is
-    // WarpSetup.exe.
+    // For example, on arm64 this is SwarfSetup-arm64.exe and on x64 this is
+    // SwarfSetup.exe.
     if cfg!(target_arch = "aarch64") {
         Ok(format!("{app_name_prefix}Setup-arm64.exe"))
     } else if cfg!(target_arch = "x86_64") {
@@ -254,11 +254,11 @@ fn installer_file_name() -> Result<String> {
 
 fn app_name_prefix(channel: Channel) -> &'static str {
     match channel {
-        Channel::Stable => "Warp",
-        Channel::Preview => "WarpPreview",
-        Channel::Local => "warp",
+        Channel::Stable => "Swarf",
+        Channel::Preview => "SwarfPreview",
+        Channel::Local => "swarf",
         Channel::Integration => "integration",
-        Channel::Dev => "WarpDev",
-        Channel::Oss => "warp-oss",
+        Channel::Dev => "SwarfDev",
+        Channel::Oss => "swarf-oss",
     }
 }

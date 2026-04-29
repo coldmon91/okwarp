@@ -26,7 +26,7 @@
 #
 # Three passwords are read from GCP Secret Manager (or from env if --read-passwords-from-env is set) if you are codesigning.
 # 1) WARP_NOTARIZATION_PASSWORD:  This is an "app-specific password" that
-#    is tied to the zach@warp.dev account.  See https://support.apple.com/en-us/HT204397
+#    is tied to the configured maintainer account.  See https://support.apple.com/en-us/HT204397
 # 2) WARP_DEVELOPER_ID_CERT_PASSWORD: This is a password tied to the private key
 #    of our cert - it is needed to use the cert to sign our binary.
 # 3) WARP_CODESIGN_KEYCHAIN_PASSWORD: This is an arbitrary password only used
@@ -270,9 +270,9 @@ fi
 
 if [[ $RELEASE_CHANNEL = "local" ]]; then
     WARP_BIN="warp"
-    BUNDLE_ID="dev.warp.Warp-Local"
-    WARP_APP_NAME="WarpLocal"
-    WARP_SCHEME_NAME="warplocal"
+    BUNDLE_ID="dev.swarf.Swarf-Local"
+    WARP_APP_NAME="SwarfLocal"
+    WARP_SCHEME_NAME="swarflocal"
     FEATURES="$FEATURES,agent_mode_debug"
     # For local builds, use different versions of our bundled frameworks (e.g.:
     # Sentry).  This needs to be exported so it can be referenced by
@@ -280,9 +280,9 @@ if [[ $RELEASE_CHANNEL = "local" ]]; then
     export FRAMEWORK_OVERRIDE="dev"
 elif [[ $RELEASE_CHANNEL = "dev" ]]; then
     WARP_BIN="dev"
-    BUNDLE_ID="dev.warp.Warp-Dev"
-    WARP_APP_NAME="WarpDev"
-    WARP_SCHEME_NAME="warpdev"
+    BUNDLE_ID="dev.swarf.Swarf-Dev"
+    WARP_APP_NAME="SwarfDev"
+    WARP_SCHEME_NAME="swarfdev"
     FEATURES="$FEATURES,agent_mode_debug"
     # Enable heap usage tracking & profiling using jemalloc through pprof.
     FEATURES="$FEATURES,jemalloc_pprof,heap_usage_tracking"
@@ -293,22 +293,22 @@ elif [[ $RELEASE_CHANNEL = "dev" ]]; then
     export HANDLE_MARKDOWN=1
 elif [[ $RELEASE_CHANNEL = "preview" ]]; then
     WARP_BIN="preview"
-    BUNDLE_ID="dev.warp.Warp-Preview"
-    WARP_APP_NAME="WarpPreview"
-    WARP_SCHEME_NAME="warppreview"
+    BUNDLE_ID="dev.swarf.Swarf-Preview"
+    WARP_APP_NAME="SwarfPreview"
+    WARP_SCHEME_NAME="swarfpreview"
     FEATURES="$FEATURES,preview_channel"
     # Enable heap usage tracking & profiling using jemalloc through pprof.
     FEATURES="$FEATURES,jemalloc_pprof,heap_usage_tracking"
 elif [[ $RELEASE_CHANNEL = "stable" ]]; then
     WARP_BIN="stable"
-    BUNDLE_ID="dev.warp.Warp-Stable"
-    WARP_APP_NAME="Warp"
-    WARP_SCHEME_NAME="warp"
+    BUNDLE_ID="dev.swarf.Swarf-Stable"
+    WARP_APP_NAME="Swarf"
+    WARP_SCHEME_NAME="swarf"
 elif [[ $RELEASE_CHANNEL = "oss" ]]; then
     WARP_BIN="warp-oss"
-    BUNDLE_ID="dev.warp.WarpOss"
-    WARP_APP_NAME="WarpOss"
-    WARP_SCHEME_NAME="warposs"
+    BUNDLE_ID="dev.swarf.Swarf"
+    WARP_APP_NAME="Swarf"
+    WARP_SCHEME_NAME="swarf"
     # The OSS channel does not ship Sentry, so drop the cocoa_sentry feature
     # (which would otherwise pull in the Sentry framework dependency).
     FEATURES="release_bundle,extern_plist"

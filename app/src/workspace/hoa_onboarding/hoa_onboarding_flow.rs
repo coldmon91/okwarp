@@ -472,7 +472,7 @@ impl HoaOnboardingFlow {
             styles: FormattedTextStyles {
                 underline: true,
                 hyperlink: Some(Hyperlink::Url(
-                    "https://docs.warp.dev/agent-platform/warp-agents/agent-notifications".into(),
+                    "https://example.invalid/swarf/docs/agent-platform/warp-agents/agent-notifications".into(),
                 )),
                 ..Default::default()
             },

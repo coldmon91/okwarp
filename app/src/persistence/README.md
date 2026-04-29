@@ -27,20 +27,20 @@ This will create a new folder with an up.sql and down.sql.
 ## Step 3: Run the migration + generate the schema
 ```
 cd <warp-internal repo>
-diesel migration run --database-url="/Users/$USER/Library/Application Support/dev.warp.Warp-Local/warp.sqlite"
+diesel migration run --database-url="/Users/$USER/Library/Application Support/dev.swarf.Swarf-Local/warp.sqlite"
 ```
 This will run the migration on the same warp that runs when you run the app locally. This automatically generates or updates the `app/src/persistence/schema.rs`. We do not make manual edits to `schema.rs`.
 
 You can also print the schema from a database that already has the migration with:
 ```
-diesel print-schema --database-url="/Users/$USER/Library/Application Support/dev.warp.Warp-Local/warp.sqlite"
+diesel print-schema --database-url="/Users/$USER/Library/Application Support/dev.swarf.Swarf-Local/warp.sqlite"
 ```
 
 ## Reverting/redo-ing migrations
 As you are writing features and changing branches, you'll want to undo migrations to fix your database and make it compatible with older code. Redo-ing can also be helpful as you are iterating on your schema.
 ```
-diesel migration revert --database-url="/Users/$USER/Library/Application Support/dev.warp.Warp-Local/warp.sqlite"
-diesel migration redo --database-url="/Users/$USER/Library/Application Support/dev.warp.Warp-Local/warp.sqlite"
+diesel migration revert --database-url="/Users/$USER/Library/Application Support/dev.swarf.Swarf-Local/warp.sqlite"
+diesel migration redo --database-url="/Users/$USER/Library/Application Support/dev.swarf.Swarf-Local/warp.sqlite"
 ```
 
 # Schema style

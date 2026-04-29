@@ -1,6 +1,6 @@
 # Run Warp at startup (Windows)
 Linear: [CODE-1786](https://linear.app/warpdotdev/issue/CODE-1786/windows-run-warp-at-startup)
-GitHub: [warpdotdev/warp#5957](https://github.com/warpdotdev/warp/issues/5957)
+GitHub: [warpdotdev/warp#5957](https://example.invalid/swarf/issues/5957)
 ## Summary
 Bring the macOS-only "Start Warp at login" setting to Windows so that Warp launches automatically whenever the user signs in to Windows. This lets users rely on the global hotkey (e.g. `Ctrl+J`) to summon Warp at any time without having to manually start it first, matching the parity the macOS version already ships.
 ## Problem

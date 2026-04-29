@@ -1,10 +1,10 @@
-pkgname=warp-terminal@@CHANNEL_SUFFIX@@
+pkgname=swarf-terminal@@CHANNEL_SUFFIX@@
 pkgver=@@VERSION@@
 pkgrel=@@RELEASE@@
-pkgdesc="Warp, the Rust-based terminal for developers and teams"
+pkgdesc="Swarf, an open-source terminal-first development environment"
 arch=('@@ARCH@@')
-url="https://warp.dev"
-license=('custom')
+url="https://example.invalid/swarf"
+license=('AGPL-3.0-only' 'MIT')
 depends=(
 	'curl'
 	'default-cursors'
@@ -25,8 +25,6 @@ optdepends=(
 	'kdialog: for file dialogs in KDE'
 	'org.freedesktop.secrets: for securely storing passwords'
 )
-# Don't perform additional stripping of binaries; we already do the amount of
-# stripping we want as part of the bundle_install script.
 options=('!strip')
 source=(
 	'data.tar'
@@ -34,9 +32,6 @@ source=(
 )
 
 package() {
-	# Unpack the base package into the output directory.
 	bsdtar -xf data.tar -C "$pkgdir/"
-
-	# Copy the shell script that launches the application.
 	install -Dm755 $pkgname.sh "$pkgdir"/usr/bin/$pkgname
 }

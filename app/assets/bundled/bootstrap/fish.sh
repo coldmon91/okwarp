@@ -538,7 +538,7 @@ function clear
     warp_send_json_message "{\"hook\": \"Clear\", \"value\": {}}"
 end
 
-function warp_finish_update
+function swarf_finish_update
   set -l update_id "$argv[1]"
   warp_send_json_message "{\"hook\": \"FinishUpdate\", \"value\": { \"update_id\": \"$update_id\"}}"
 end
@@ -551,7 +551,7 @@ end
 # The `.sources` file could only exist if a user manually created it; Ubuntu doesn't create one automatically for the
 # warp source file due to a bug in its update flow where it considers our source file to be "invalid" because it
 # contains a `signed-by` key.
-function warp_handle_dist_upgrade
+function swarf_handle_dist_upgrade
   set -l source_file_name "$argv[1]"
 
   # The `apt-config shell` command outputs an environment variable assignment in POSIX-compliant syntax. Therefore,

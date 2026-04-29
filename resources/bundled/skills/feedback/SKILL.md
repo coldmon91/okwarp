@@ -43,7 +43,7 @@ Load the bundled reference files only when relevant:
   - General venting, praise, or commentary with no actionable product signal.
   - Questions about third-party tools or the user's own shell, machine, or network configuration that are not about Warp's behavior.
   - Anything the user explicitly says is not about Warp, or that they just want to talk through.
-- When you decline, respond in one or two sentences that (a) say you won't file an issue, (b) name the reason in plain language, and (c) point the user at the right channel: account/billing/support concerns go to the in-app Help menu or `support@warp.dev`, community discussion goes to the Warp Slack community, and security reports go to `security@warp.dev`. Do not apologize performatively and do not offer to retry the same flow.
+- When you decline, respond in one or two sentences that (a) say you won't file an issue, (b) name the reason in plain language, and (c) point the user at the right channel: account/billing/support concerns go to the in-app Help menu or `maintainers@example.invalid`, community discussion goes to the Warp Slack community, and security reports go to `maintainers@example.invalid`. Do not apologize performatively and do not offer to retry the same flow.
 - Only if the request is in scope, classify it as `bug`, `regression`, `ux issue`, or `feature request` before drafting.
 
 ### 2. Ask only for missing facts that materially improve the draft

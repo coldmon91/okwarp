@@ -9,8 +9,8 @@ use crate::{
     server::server_api::{ServerApi, FETCH_CHANNEL_VERSIONS_TIMEOUT},
 };
 
-// Fetches channel versions asynchronously from the Warp server. If the Warp server request fails,
-// then fetches from GCP JSON storage as a fallback.
+// Fetches channel versions asynchronously from the configured server. If the request fails,
+// then fetches from JSON storage as a fallback.
 pub async fn fetch_channel_versions(
     nonce: &str,
     server_api: Arc<ServerApi>,
@@ -29,7 +29,7 @@ pub async fn fetch_channel_versions(
     let channel_versions = server_api
         .fetch_channel_versions(include_changelogs, is_daily)
         .await
-        .context("Failed to retrieve channel versions from Warp server");
+        .context("Failed to retrieve channel versions from configured server");
     match channel_versions {
         channel_versions @ Ok(_) => channel_versions,
         Err(err) => {
@@ -39,8 +39,8 @@ pub async fn fetch_channel_versions(
                 // our Sentry logs).
                 Channel::Dev | Channel::Preview => report_error!(err),
                 _ => log::warn!(
-                    "Failed to retrieve channel versions from Warp server, falling \
-                back to GCP JSON storage."
+                    "Failed to retrieve channel versions from configured server, falling \
+                back to JSON storage."
                 ),
             }
             fetch_channel_versions_from_json_storage(server_api.http_client(), nonce).await
@@ -48,15 +48,14 @@ pub async fn fetch_channel_versions(
     }
 }
 
-// Synchronously fetches updated Warp [`ChannelVersions`] from GCP JSON storage. This will soon
-// be deprecated in favor of retrieving updated channel versions from the Warp Server.
+// Synchronously fetches updated Swarf [`ChannelVersions`] from JSON storage.
 // Note, in order to run against a test file you can use the "channel_versions_test.json" file
-// and update the file using gsutil cp channel_versions_test.json gs://warp-releases/channel_versions_test.json
+// and update the file using the fork's configured release storage.
 async fn fetch_channel_versions_from_json_storage(
     client: &http_client::Client,
     nonce: &str,
 ) -> Result<ChannelVersions> {
-    log::info!("Fetching channel versions from GCP JSON storage");
+    log::info!("Fetching channel versions from JSON storage");
     let res = client
         .get(
             format!(

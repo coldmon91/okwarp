@@ -121,7 +121,7 @@ runs:
       run: |
         set -euo pipefail
         git config user.name "Warp Agent"
-        git config user.email "agent@warp.dev"
+        git config user.email "maintainers@example.invalid"
     
     - name: Run Warp agent
       shell: bash

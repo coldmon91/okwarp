@@ -1,7 +1,7 @@
 # PRODUCT.md — CODE-1779: Drag-and-drop file paths in WSL (and Git Bash)
 
 Linear: https://linear.app/warpdotdev/issue/CODE-1779/windows-drag-and-drop-file-paths-in-wsl
-Upstream: https://github.com/warpdotdev/warp/issues/6191
+Upstream: https://example.invalid/swarf/issues/6191
 
 Figma: none provided (no visual design — the change is purely in which string lands in the input buffer)
 

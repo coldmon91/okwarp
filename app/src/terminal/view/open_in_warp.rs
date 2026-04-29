@@ -42,8 +42,9 @@ use super::{Event, InlineBannerItem, InlineBannerType, TerminalView};
 mod tests;
 
 const LEARN_MORE_MARKDOWN_URL: &str =
-    "https://docs.warp.dev/terminal/more-features/markdown-viewer";
-const LEARN_MORE_CODE_URL: &str = "https://docs.warp.dev/code/overview#built-in-code-editor";
+    "https://example.invalid/swarf/docs/terminal/more-features/markdown-viewer";
+const LEARN_MORE_CODE_URL: &str =
+    "https://example.invalid/swarf/docs/code/overview#built-in-code-editor";
 
 /// A path to a file that can be opened in Warp, along with its type.
 #[derive(Debug, Clone, PartialEq, Eq)]

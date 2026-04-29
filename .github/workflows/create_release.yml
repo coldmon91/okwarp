@@ -1449,7 +1449,7 @@ jobs:
       # We locate them so ISCC can call signtool during compilation to sign the inner setup engine
       # (the file extracted to %TEMP% at runtime). This prevents Defender ASR rule D4F940AB from
       # blocking the installer in enterprise environments. See this issue:
-      # https://github.com/warpdotdev/Warp/issues/8794
+      # https://example.invalid/swarf/issues/8794
       - name: Build sign-tool command for Inno Setup
         id: setup_signing
         shell: pwsh

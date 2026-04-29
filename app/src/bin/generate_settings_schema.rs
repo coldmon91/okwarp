@@ -1,4 +1,4 @@
-//! Generates a JSON Schema file describing Warp's user-facing settings.
+//! Generates a JSON Schema file describing Swarf's user-facing settings.
 //!
 //! Usage:
 //! ```
@@ -230,12 +230,12 @@ fn main() {
     );
     root.insert(
         "title".to_string(),
-        Value::String("Warp Settings".to_string()),
+        Value::String("Swarf Settings".to_string()),
     );
     root.insert(
         "description".to_string(),
         Value::String(format!(
-            "JSON Schema for Warp settings ({channel} channel, {entry_count} settings)"
+            "JSON Schema for Swarf settings ({channel} channel, {entry_count} settings)"
         )),
     );
     root.insert("type".to_string(), Value::String("object".to_string()));

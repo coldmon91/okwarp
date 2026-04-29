@@ -69,7 +69,7 @@ pub enum FeatureFlag {
     /// lib will use the user's history as a last-ditch effort to find a reasonable correction.
     CommandCorrectionsHistoryRule,
 
-    /// Used to gate an experiment we're doing on WarpDev ONLY
+    /// Used to gate an experiment we're doing on SwarfDev ONLY
     /// to get a sense of PTY throughput over time.
     RecordPtyThroughput,
 
@@ -914,7 +914,7 @@ pub const DOGFOOD_FLAGS: &[FeatureFlag] = &[
 ];
 
 /// Features enabled for feature preview build users (e.g.: Friends of Warp).
-/// All PREVIEW_FLAGS are also automatically added to dogfood builds (WarpDev).
+/// All PREVIEW_FLAGS are also automatically added to dogfood builds (SwarfDev).
 pub const PREVIEW_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::Orchestration,
     FeatureFlag::BlocklistMarkdownTableRendering,
@@ -927,7 +927,7 @@ pub const PREVIEW_FLAGS: &[FeatureFlag] = &[
     FeatureFlag::GitOperationsInCodeReview,
 ];
 
-/// Features enabled for all release builds (i.e.: everything but WarpLocal).
+/// Features enabled for all release builds (i.e.: everything but SwarfLocal).
 /// NOTE: if you are promoting a feature from Preview to launch, you'll likely
 /// want to enable the feature by default in app/Cargo.toml, rather than add it to RELEASE_FLAGS.
 pub const RELEASE_FLAGS: &[FeatureFlag] = &[

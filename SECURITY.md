@@ -1,14 +1,11 @@
 # Security Policy
 
-We take security seriously at Warp and appreciate the efforts of security researchers who help keep our users safe.
+Security issues should be reported privately.
 
-## Reporting a Vulnerability
+Use this repository's private security advisory feature if it is enabled. If it is not enabled, contact the
+Swarf maintainers through a private channel published by this fork.
 
-If you believe you've found a security vulnerability, please follow responsible disclosure practices and **do not** open a public GitHub issue, as this could expose the vulnerability before a fix is available.
+Do not send Swarf-only vulnerability reports to upstream Warp addresses. If a vulnerability also affects
+unmodified upstream Warp code, consider reporting it to the upstream project separately.
 
-Instead, please report it through one of the following channels:
-
-- **Email:** [security@warp.dev](mailto:security@warp.dev)
-- **GitHub Security Advisory:** [Open a private advisory](https://github.com/warpdotdev/Warp/security/advisories/new)
-
-We will acknowledge your report promptly and work with you to understand and resolve the issue as quickly as possible.
+Do not include secrets, tokens, private keys, credentials, or private customer data in public issues.

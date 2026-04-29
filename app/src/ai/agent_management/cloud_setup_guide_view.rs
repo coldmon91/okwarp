@@ -29,10 +29,10 @@ use warpui::ui_components::components::{UiComponent, UiComponentStyles};
 use warpui::ViewHandle;
 use warpui::{AppContext, Entity, SingletonEntity, TypedActionView, View, ViewContext};
 
-const DOCS_URL: &str = "https://docs.warp.dev/agent-platform/cloud-agents/overview";
+const DOCS_URL: &str = "https://example.invalid/swarf/docs/agent-platform/cloud-agents/overview";
 const ENV_DOCS_URL: &str =
-    "https://docs.warp.dev/reference/cli/integration-setup#creating-an-environment";
-const OZ_URL: &str = "https://oz.warp.dev";
+    "https://example.invalid/swarf/docs/reference/cli/integration-setup#creating-an-environment";
+const OZ_URL: &str = "https://example.invalid/swarf/agents";
 
 const CONTENT_MAX_WIDTH: f32 = 720.;
 
@@ -207,13 +207,13 @@ impl CloudSetupGuideView {
         header_container.finish()
     }
 
-    /// Render the quick start banner with link to oz.warp.dev.
+    /// Render the quick start banner with a link to the configured agent dashboard.
     fn render_quick_start_banner(&self, appearance: &Appearance) -> Box<dyn Element> {
         let theme = appearance.theme();
         let font_size = 16.;
 
         let text = Text::new_inline(
-            "Quick start: Visit oz.warp.dev for a UI-based setup experience.",
+            "Quick start: Visit the configured agent dashboard for a UI-based setup experience.",
             appearance.ui_font_family(),
             font_size,
         )

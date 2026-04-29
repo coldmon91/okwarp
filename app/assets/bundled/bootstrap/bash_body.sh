@@ -894,7 +894,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         fi
     }
 
-    function warp_finish_update {
+    function swarf_finish_update {
       local update_id="$1"
       if [ "$WARP_IN_MSYS2" = true ]; then
         warp_send_hook_via_kv_pairs_start "FinishUpdate"
@@ -912,7 +912,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
     # The `.sources` file could only exist if a user manually created it; Ubuntu doesn't create one automatically for the
     # warp source file due to a bug in its update flow where it considers our source file to be "invalid" because it
     # contains a `signed-by` key.
-    function warp_handle_dist_upgrade {
+    function swarf_handle_dist_upgrade {
       local source_file_name="$1"
 
       eval "$(command apt-config shell APT_SOURCESDIR 'Dir::Etc::sourceparts/d')"

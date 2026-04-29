@@ -50,7 +50,7 @@ pub enum ThemePickerSlideAction {
     PrivacySettingsClicked,
 }
 
-const TOS_URL: &str = "https://www.warp.dev/terms-of-service";
+const TOS_URL: &str = "https://example.invalid/swarf/terms-of-service";
 
 #[derive(Debug, Clone)]
 struct ThemeOption {

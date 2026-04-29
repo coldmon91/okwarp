@@ -8,9 +8,9 @@ pub use state::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Channel {
-    /// The official/first-party stable release.
+    /// The stable release.
     Stable,
-    /// The official/first-party feature preview release.
+    /// The feature preview release.
     Preview,
 
     /// The internal-only nightly build.
@@ -18,7 +18,7 @@ pub enum Channel {
     /// The internal-only HEAD build.
     Local,
 
-    /// The open-source build of Warp.
+    /// The open-source build of Swarf.
     Oss,
 
     /// The integration test build.

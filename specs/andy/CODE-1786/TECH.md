@@ -6,14 +6,14 @@ The macOS "Start Warp at login" feature is already plumbed end-to-end. This tick
 Relevant code today:
 - `app/src/terminal/general_settings.rs:36-55` — `add_app_as_login_item` (`LoginItem`) and `app_added_as_login_item` (`AppAddedAsLoginItem`), both gated on `SupportedPlatforms::MAC` with defaults `true` / `false` respectively. The second setting is the "already registered" bookkeeping that prevents clobbering a manual unregister.
 - `app/src/lib.rs:2229-2239` — startup wiring. Subscribes to `GeneralSettingsChangedEvent::LoginItem` and calls `maybe_register_app_as_login_item` on change + once at launch. Entire block is `#[cfg(target_os = "macos")]`.
-- `app/src/lib.rs:2279-2362` — `maybe_register_app_as_login_item`. macOS-only. Guards on `WARP_INTEGRATION`, skips when bundle identifier is missing or equals `dev.warp.Warp-Local`, runs `SMAppService register/unregisterAndReturnError:` off the UI thread, then writes the result back to `app_added_as_login_item`.
+- `app/src/lib.rs:2279-2362` — `maybe_register_app_as_login_item`. macOS-only. Guards on `WARP_INTEGRATION`, skips when bundle identifier is missing or equals `dev.swarf.Swarf-Local`, runs `SMAppService register/unregisterAndReturnError:` off the UI thread, then writes the result back to `app_added_as_login_item`.
 - `app/src/settings_view/features_page.rs` — toggle UI:
   - action enum: `FeaturesPageAction::ToggleLoginItem` (~l618)
   - telemetry: `ToggleLoginItem` branch (~l975-978)
   - handler: `ToggleLoginItem => ...` (~l1855-1857)
   - widget: `LoginItemWidget` (~l4488-4533), rendered only when `add_app_as_login_item.is_supported_on_current_platform()` returns true (~l2481-2486). Label is hard-coded to `"Start Warp at login (requires macOS 13+)"`.
 - `crates/settings/src/lib.rs:161-219` — `SupportedPlatforms` enum and `matches_current_platform`. Supports `OR(…, …)` so `MAC` + `WINDOWS` can be expressed without adding a new variant.
-- `crates/warp_core/src/channel/state.rs:119-125, 40` — `ChannelState::app_id()` returns the current channel's `AppId` (e.g. `dev.openwarp.OpenWarp`, `dev.warp.Warp`, `dev.warp.WarpPreview`, `dev.warp.WarpDev`). We can reuse `application_name()` for the channel-specific registry value name on Windows.
+- `crates/warp_core/src/channel/state.rs:119-125, 40` — `ChannelState::app_id()` returns the current channel's `AppId` (e.g. `dev.openwarp.OpenWarp`, `dev.swarf.Swarf`, `dev.swarf.SwarfPreview`, `dev.swarf.SwarfDev`). We can reuse `application_name()` for the channel-specific registry value name on Windows.
 - `app/Cargo.toml:356-377` — Windows-only dependency block. `winreg`, `windows-registry`, and `windows` are already pulled in and available for a new module. `winreg` is already used for reading registry values (`crates/warpui/src/windowing/winit/windows/registry.rs`), so we should follow that pattern for consistency.
 ## Proposed changes
 ### 1. Loosen the setting's platform gate
@@ -39,7 +39,7 @@ Add `login_item/windows.rs` with the Windows implementation:
 - Pull the desired state + the already-registered flag off `GeneralSettings` the same way the macOS path does.
 - Short-circuit if `add_app_as_login_item && app_added_as_login_item` (the existing "don't clobber a manual unregister" contract from `lib.rs:2290-2296`).
 - Resolve the executable path via `std::env::current_exe()?` then `dunce::canonicalize`. `std::fs::canonicalize` on Windows always returns a Win32 verbatim (`\\?\`) path, which is ugly in Settings → Apps → Startup / Task Manager and trips up some third-party tools that parse the `Run` value; `dunce` strips the prefix when safe and leaves it alone for real UNC / long paths. Bail with a debug log if resolution fails.
-- Skip registration for dev/local builds. The cleanest check is `ChannelState::is_release_bundle()` (see `crates/warp_core/src/channel/state.rs:77-79`); use it as the Windows equivalent of the macOS "bundle identifier missing / `dev.warp.Warp-Local`" guard. Explicitly keep the behavior that enabling the toggle in a dev build persists the preference but does not write the registry value, since the preference is synced via user settings and would bleed into release runs otherwise — we only skip the I/O, not the preference update. (Matches macOS: toggling in a non-bundled build is a no-op on the system side.)
+- Skip registration for dev/local builds. The cleanest check is `ChannelState::is_release_bundle()` (see `crates/warp_core/src/channel/state.rs:77-79`); use it as the Windows equivalent of the macOS "bundle identifier missing / `dev.swarf.Swarf-Local`" guard. Explicitly keep the behavior that enabling the toggle in a dev build persists the preference but does not write the registry value, since the preference is synced via user settings and would bleed into release runs otherwise — we only skip the I/O, not the preference update. (Matches macOS: toggling in a non-bundled build is a no-op on the system side.)
 - Off-thread the registry I/O via `ctx.spawn`, mirroring the macOS path and the existing async signature `|settings, app_added_as_login_item, ctx| { ... }`. Return `bool` for "registered successfully" so the existing completion handler can set `app_added_as_login_item`.
 - Registry work itself:
   ```rust path=null start=null
@@ -48,7 +48,7 @@ Add `login_item/windows.rs` with the Windows implementation:
   const RUN_SUBKEY: &str =
       r"Software\Microsoft\Windows\CurrentVersion\Run";
   fn value_name() -> String {
-      // e.g. "Warp", "WarpPreview", "WarpDev", "OpenWarp"
+      // e.g. "Swarf", "SwarfPreview", "SwarfDev", "OpenSwarf"
       ChannelState::app_id().application_name().to_owned()
   }
   fn register(exe: &Path) -> std::io::Result<()> {
@@ -72,7 +72,7 @@ Add `login_item/windows.rs` with the Windows implementation:
   }
   ```
   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` is the user-scope per-login key; it does not require admin, and is what Windows 10/11's **Settings → Apps → Startup** and **Task Manager → Startup apps** surface. This satisfies Behavior invariants 3–4, 7, 11.
-- The per-channel value name from `application_name()` keeps Dev/Preview/Stable isolated (Behavior 7): `Warp`, `WarpPreview`, `WarpDev`, `OpenWarp`.
+- The per-channel value name from `application_name()` keeps Dev/Preview/Stable isolated (Behavior 7): `Swarf`, `SwarfPreview`, `SwarfDev`, `OpenSwarf`.
 - Behavior 10 ("moving the install") is partially covered: the short-circuit `add_app_as_login_item && app_added_as_login_item` intentionally prevents re-registration on every launch, so a moved install keeps the stale path until the user toggles the setting off and back on (which rewrites against the new `current_exe()`). Automatic detection + rewrite when the stored path differs is tracked as a follow-up.
 ### 3. Rewire startup
 Replace the existing `#[cfg(target_os = "macos")]` block in `app/src/lib.rs:2229-2239` with a block gated on `cfg(any(target_os = "macos", target_os = "windows"))`, calling the new cross-platform `login_item::maybe_register_app_as_login_item`. The subscription to `GeneralSettingsChangedEvent::LoginItem` stays identical. Delete the old `maybe_register_app_as_login_item` body from `lib.rs:2279-2362`.
@@ -94,7 +94,7 @@ Verification maps back to the numbered invariants in `PRODUCT.md`.
 Unit tests (Windows, gated with `#[cfg(target_os = "windows")]`):
 - **Invariant 3 (enable registers).** Drive `register()` against a temporary `HKCU` subkey (or wrap the subkey path in a trait and use a fake in tests) and assert the value is `"\"<path>\""` under the expected name.
 - **Invariant 4 (disable unregisters, idempotent).** Call `unregister()` twice in a row; both must succeed. Calling `unregister()` when the value was never set must succeed.
-- **Invariant 7 (per-channel isolation).** With different `ChannelState` app IDs, `value_name()` returns distinct strings (`Warp`, `WarpPreview`, `WarpDev`). Registering under one does not touch another.
+- **Invariant 7 (per-channel isolation).** With different `ChannelState` app IDs, `value_name()` returns distinct strings (`Swarf`, `SwarfPreview`, `SwarfDev`). Registering under one does not touch another.
 - **Invariant 10 (path move).** Register with path A, then with path B; the stored value is B. No leftover value under a different name.
 Because the real `Software\Microsoft\Windows\CurrentVersion\Run` hive is shared user state that should not be mutated by tests, the registry helpers should accept an injectable subkey path (e.g. `register_with_subkey(subkey, …)`) and the tests should drive them against `Software\Warp\TestRun\<uuid>` under HKCU, cleaning up on drop. Follow the `crates/warpui/src/windowing/winit/windows/registry.rs` style for the read-side helper for consistency.
 Cross-platform tests (run on every OS):
@@ -105,7 +105,7 @@ Manual validation (Windows):
 2. **Invariant 3–4.** Toggle off; confirm the registry value is gone and Windows UIs no longer show the entry. Toggle back on; confirm value is rewritten.
 3. **Invariant 5.** With toggle on, delete the registry value (or disable from Task Manager). Relaunch Warp; verify the value is **not** recreated and `app_added_as_login_item` stays true. Toggle off then on in-app; verify the value *is* recreated.
 4. **Invariant 6.** Sign out and back into Windows. Warp launches without stealing focus; the global hotkey surfaces it as expected.
-5. **Invariant 7.** Install both Stable and Preview channels; enable the setting in each; confirm both registry values (`Warp`, `WarpPreview`) coexist and unregistering one doesn't affect the other.
+5. **Invariant 7.** Install both Stable and Preview channels; enable the setting in each; confirm both registry values (`Swarf`, `SwarfPreview`) coexist and unregistering one doesn't affect the other.
 6. **Invariant 8.** Run `cargo run` from a dev checkout with the toggle on; confirm no registry value is written and the preference updates still persist.
 7. **Invariant 10.** Move/rename the install directory, relaunch Warp, toggle off+on; confirm the registry value points at the new path.
 Telemetry (**Invariant 12**): filter the dashboard for `FeaturesPageAction { action: "ToggleLoginItem" }` and confirm Windows events arrive alongside macOS ones post-rollout.

@@ -12,7 +12,7 @@ If you're not sure whether you should add a test, check our testing policy: http
 <!-- You may remove this section if your PR does not have any server dependencies. -->
 - [ ] Is this change necessary to make the client compatible with a desired [server API breaking change](https://www.notion.so/warpdev/How-to-safely-introduce-server-API-breaking-changes-0aa805ff5d5d41fd8834f3c95caba0b4?pvs=4#d55ecf8aea3449949d3c33b0e67f6800)?
 - [ ] Does this change rely on a [new server API](https://www.notion.so/warpdev/How-to-add-a-new-full-stack-feature-8412cede405a4ec194b32bdd4b951035?pvs=4#04da1e6a493542d68b3e998c7d339640)?
-  - [ ] If so, is the use of this API restricted to client channels that rely on the staging server (e.g. WarpDev)?
+  - [ ] If so, is the use of this API restricted to client channels that rely on the staging server (e.g. SwarfDev)?
 - [ ] Is this change enabling the use of a server API on client channels that rely on the production server (e.g. WarpStable)?
   - [ ] If so, has the new server API been stable on production for at least one server release cycle? See [here](https://www.notion.so/warpdev/How-to-add-a-new-full-stack-feature-8412cede405a4ec194b32bdd4b951035?pvs=4#73b202f939834b97ab1fbdf7fc82cd53) for more details.
 

@@ -30,7 +30,7 @@ fn macos_config_dir_name() -> String {
 
 Both `data_dir()` and `config_local_dir()` use this on macOS, so all config paths (`settings.toml`, `keybindings.yaml`, `themes/`, `workflows/`, `tab_configs/`, etc.) resolve under `~/.warp` for both Stable and Preview.
 
-The SQLite database is **not** affected — it is stored under `secure_state_dir()` (App Group container) or `state_dir()` (`~/Library/Application Support/dev.warp.Warp-Preview/`), both of which already use the bundle ID and are channel-specific.
+The SQLite database is **not** affected — it is stored under `secure_state_dir()` (App Group container) or `state_dir()` (`~/Library/Application Support/dev.swarf.Swarf-Preview/`), both of which already use the bundle ID and are channel-specific.
 
 The `WARP_CONFIG_DIR` constant (`.warp`) is also used for per-repository project configs (e.g., `./.warp/workflows`). This is unrelated to the home-directory config and must not change.
 

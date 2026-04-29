@@ -250,7 +250,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
         Clear-History -CommandLine 'Warp-Run-GeneratorCommand*'
     }
 
-    function Warp-Finish-Update([string]$updateId) {
+    function Swarf-Finish-Update([string]$updateId) {
         $updateMsg = @{
             hook = 'FinishUpdate'
             value = @{
@@ -260,7 +260,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
         Warp-Send-JsonMessage $updateMsg
     }
 
-    function Warp-Handle-DistUpgrade {
+    function Swarf-Handle-DistUpgrade {
         [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingInvokeExpression', '', Justification = 'We actually need it')]
         param([string]$sourceFileName)
 
@@ -956,7 +956,7 @@ $null = New-Module -Name Warp-Module -ScriptBlock {
     # bootstrap logic pasted into the PTY and the output of shell startup files.
     Warp-Precmd -status $global:? -code $global:LASTEXITCODE
 
-    Export-ModuleMember -Function clear, Clear-Host, Get-EpochTime, Warp-Finish-Update, Warp-Handle-DistUpgrade, Warp-Run-GeneratorCommand, Warp-Finish-Bootstrap
+    Export-ModuleMember -Function clear, Clear-Host, Get-EpochTime, Swarf-Finish-Update, Swarf-Handle-DistUpgrade, Warp-Run-GeneratorCommand, Warp-Finish-Bootstrap
 }
 
 # Finally, get ready to source the user's RC files. This must be done in the global scope (not

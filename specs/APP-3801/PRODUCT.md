@@ -4,15 +4,15 @@ Linear: [APP-3801](https://linear.app/warpdotdev/issue/APP-3801)
 
 ## Summary
 
-The remote server gains a daemon-wide authentication layer so that handlers running on a remote host can make authenticated upstream calls to Warp services on behalf of the Warp user driving the daemon. The initial credential rides on the existing `Initialize` handshake as a new `auth_token` field (no extra round-trip on connection setup); mid-session rotation uses a dedicated new `Authenticate` message. The credential lives in daemon memory for the daemon's lifetime and is cleared only on process exit — there is no explicit protocol message to clear it mid-life.
+The remote server gains a daemon-wide authentication layer so that handlers running on a remote host can make authenticated upstream calls to Swarf-compatible services on behalf of the OkSwarf user driving the daemon. The initial credential rides on the existing `Initialize` handshake as a new `auth_token` field (no extra round-trip on connection setup); mid-session rotation uses a dedicated new `Authenticate` message. The credential lives in daemon memory for the daemon's lifetime and is cleared only on process exit — there is no explicit protocol message to clear it mid-life.
 
 ## Problem
 
-Today the remote server has no notion of user identity. Any handler that needs to call Warp services (`app.warp.dev` APIs, upstream LLM routing, telemetry attribution, Drive-backed features) from the remote host has no credential to present. At the same time, APP-4068 makes the server a long-running daemon shared across multiple client connections from the same user's tabs, with a 10-minute grace period after the last disconnect. Any credential model for this system has to work within that architecture: the daemon is started by whichever proxy got there first, serves multiple concurrent connections, and may outlive any single SSH session.
+Today the remote server has no notion of user identity. Any handler that needs to call Swarf-compatible services (`example.invalid` APIs, upstream LLM routing, telemetry attribution, drive-backed features) from the remote host has no credential to present. At the same time, APP-4068 makes the server a long-running daemon shared across multiple client connections from the same user's tabs, with a 10-minute grace period after the last disconnect. Any credential model for this system has to work within that architecture: the daemon is started by whichever proxy got there first, serves multiple concurrent connections, and may outlive any single SSH session.
 
 ## Goals
 
-- Give the daemon a way to receive the current Warp credential for the user that owns its socket path.
+- Give the daemon a way to receive the current OkSwarf credential for the user that owns its socket path.
 - Let handlers running on the daemon use that credential for upstream calls.
 - Support mid-session credential rotation so short-lived tokens (Firebase ID tokens) can refresh without tearing down the connection.
 - Keep the credential in daemon memory only — never on disk, never in process arguments or environment.
@@ -20,7 +20,7 @@ Today the remote server has no notion of user identity. Any handler that needs t
 
 ## Non-goals
 
-- Multi-user authentication on a shared daemon. All connections on a given daemon belong to the same Warp user by construction — socket-path partitioning by identity key in APP-4068 enforces this at the file-system level.
+- Multi-user authentication on a shared daemon. All connections on a given daemon belong to the same OkSwarf user by construction — socket-path partitioning by identity key in APP-4068 enforces this at the file-system level.
 - Validating credentials locally on the remote host. Validity is determined by the upstream service that receives them.
 - Persisting credentials across server restarts or across the daemon's grace-period expiry.
 - Securing the server against adversarial co-located Unix users on the remote host. SSH is assumed to be the trust boundary.
@@ -49,7 +49,7 @@ The daemon never mutates its credential in response to connection events. The si
 ### Connection authentication
 
 1. The client carries its current bearer token on the `Initialize` handshake itself (as the new `auth_token` field). The daemon stores it as its single credential as part of handshake processing. No follow-up message is required to complete initial authentication.
-2. The credential is daemon-wide, not per-connection. All connections on a given daemon share one credential because the socket path guarantees they all belong to the same Warp user.
+2. The credential is daemon-wide, not per-connection. All connections on a given daemon share one credential because the socket path guarantees they all belong to the same Swarf user.
 3. For mid-session rotation, the client sends a fire-and-forget `Authenticate` message. It carries only a new bearer token; no acknowledgement is sent. `Initialize` retains its existing request-response structure and is only used for new connections.
 4. Any connection may carry a refresh `Authenticate`; the client picks one arbitrarily and does not fan out. Initial authentication and refresh are distinct on the wire (the former rides on `Initialize`), though both write to the same daemon singleton.
 

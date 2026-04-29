@@ -2581,7 +2581,10 @@ impl SettingsWidget for CreateCustomThemeWidget {
                 .ui_builder()
                 .link(
                     "Create your own custom theme".to_string(),
-                    Some("https://docs.warp.dev/terminal/appearance/custom-themes".to_string()),
+                    Some(
+                        "https://example.invalid/swarf/docs/terminal/appearance/custom-themes"
+                            .to_string(),
+                    ),
                     None,
                     self.mouse_state.clone(),
                 )
@@ -3139,7 +3142,8 @@ impl SettingsWidget for WindowBlurWidget {
         let label_info = AdditionalInfo {
             mouse_state: self.info_button.clone(),
             on_click_action: Some(AppearancePageAction::OpenUrl(
-                "https://docs.warp.dev/terminal/appearance/size-opacity-blurring".into(),
+                "https://example.invalid/swarf/docs/terminal/appearance/size-opacity-blurring"
+                    .into(),
             )),
             secondary_text: None,
             tooltip_override_text: None,
@@ -4950,7 +4954,7 @@ impl SettingsWidget for AltScreenPaddingWidget {
             Some(AdditionalInfo {
                 mouse_state: self.additional_info_mouse_state.clone(),
                 on_click_action: Some(AppearancePageAction::OpenUrl(
-                    "https://docs.warp.dev/terminal/more-features/full-screen-apps#padding".into(),
+                    "https://example.invalid/swarf/docs/terminal/more-features/full-screen-apps#padding".into(),
                 )),
                 secondary_text: None,
                 tooltip_override_text: None,

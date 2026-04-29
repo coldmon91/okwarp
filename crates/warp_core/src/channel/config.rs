@@ -12,7 +12,7 @@ pub struct ChannelConfig {
     /// The name of the file to which logs should be written.
     pub logfile_name: Cow<'static, str>,
 
-    /// Configuration for talking to Warp's servers.
+    /// Configuration for talking to Swarf-compatible servers.
     pub server_config: WarpServerConfig,
     /// Configuration for Oz/ambient agents.
     pub oz_config: OzConfig,
@@ -31,7 +31,7 @@ pub struct ChannelConfig {
 pub struct WarpServerConfig {
     /// The root URL for the standard server pool.
     pub server_root_url: Cow<'static, str>,
-    /// The URL for the RTC server, which serves real-time updates for Warp Drive objects.
+    /// The URL for the RTC server, which serves real-time updates for shared objects.
     pub rtc_server_url: Cow<'static, str>,
     /// The URL for the session sharing server, or [`None`] if session sharing is not
     /// supported.
@@ -43,10 +43,10 @@ pub struct WarpServerConfig {
 impl WarpServerConfig {
     pub fn production() -> Self {
         Self {
-            server_root_url: "https://app.warp.dev".into(),
-            rtc_server_url: "wss://rtc.app.warp.dev/graphql/v2".into(),
-            session_sharing_server_url: Some("wss://sessions.app.warp.dev".into()),
-            firebase_auth_api_key: "AIzaSyBdy3O3S9hrdayLJxJ7mriBR4qgUaUygAs".into(),
+            server_root_url: "https://example.invalid/swarf/app".into(),
+            rtc_server_url: "wss://example.invalid/swarf/rtc/graphql/v2".into(),
+            session_sharing_server_url: Some("wss://example.invalid/swarf/sessions".into()),
+            firebase_auth_api_key: "".into(),
         }
     }
 
@@ -62,7 +62,7 @@ impl WarpServerConfig {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OzConfig {
-    /// Root URL for the Oz (ambient agent management) dashboard.
+    /// Root URL for the ambient agent management dashboard.
     pub oz_root_url: Cow<'static, str>,
 
     /// URL to use as the audience when issuing workload identity tokens. If [`None`], falls back
@@ -74,7 +74,7 @@ pub struct OzConfig {
 impl OzConfig {
     pub fn production() -> Self {
         Self {
-            oz_root_url: "https://oz.warp.dev".into(),
+            oz_root_url: "https://example.invalid/swarf/agents".into(),
             workload_audience_url: None,
         }
     }
