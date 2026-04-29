@@ -298,11 +298,13 @@ impl PromptAlertView {
             }
             PromptAlertState::AnonymousUserRequestLimitSoftGate
             | PromptAlertState::AnonymousUserRequestLimitHardGate => {
-                text_fragments.push(FormattedTextFragment::plain_text("  "));
-                text_fragments.push(FormattedTextFragment::hyperlink_action(
-                    ANONYMOUS_USER_REQUEST_LIMIT_ACTION_TEXT,
-                    PromptAlertAction::SignUpClickedForAnonymousUser,
-                ));
+                if !crate::server::server_api::is_warp_server_disabled() {
+                    text_fragments.push(FormattedTextFragment::plain_text("  "));
+                    text_fragments.push(FormattedTextFragment::hyperlink_action(
+                        ANONYMOUS_USER_REQUEST_LIMIT_ACTION_TEXT,
+                        PromptAlertAction::SignUpClickedForAnonymousUser,
+                    ));
+                }
             }
             PromptAlertState::DelinquentDueToPaymentIssue => {
                 // Check if user is team admin with billing history

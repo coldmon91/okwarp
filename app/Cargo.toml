@@ -533,6 +533,8 @@ default = [
     "fallback_model_load_output_messaging",
     "api_key_authentication",
     "api_key_management",
+    "skip_firebase_anonymous_user",
+    "solo_user_byok",
     "summarization_cancellation_confirmation",
     "ui_zoom",
     "discard_per_file_and_all_changes",
@@ -918,7 +920,7 @@ hoa_notifications = []
 open_code_notifications = []
 transfer_control_tool = []
 skip_firebase_anonymous_user = []
-solo_user_byok = []
+solo_user_byok = ["warp_core/solo_user_byok"]
 configurable_toolbar = []
 warpify_footer = []
 hoa_onboarding_flow = []

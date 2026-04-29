@@ -47,8 +47,9 @@ use warpui::r#async::BoxFuture;
 use crate::auth::UserUid;
 use crate::server::graphql::{default_request_options, get_user_facing_error_message};
 use crate::server::ids::ApiKeyUid;
-use crate::server::server_api::register_error;
-use crate::server::server_api::EXPERIMENT_ID_HEADER;
+use crate::server::server_api::{
+    ensure_warp_server_enabled, is_warp_server_disabled, register_error, EXPERIMENT_ID_HEADER,
+};
 use crate::settings::PrivacySettingsSnapshot;
 use crate::{
     auth::{
@@ -220,6 +221,8 @@ impl AuthClient for ServerApi {
         referral_code: Option<String>,
         anonymous_user_type: AnonymousUserType,
     ) -> Result<CreateAnonymousUserResult> {
+        ensure_warp_server_enabled()?;
+
         let variables = CreateAnonymousUserVariables {
             input: warp_graphql::mutations::create_anonymous_user::CreateAnonymousUserInput {
                 anonymous_user_type,
@@ -244,6 +247,7 @@ impl AuthClient for ServerApi {
         if cfg!(feature = "skip_login") {
             bail!("skip_login enabled; failing all authenticated requests");
         }
+        ensure_warp_server_enabled()?;
 
         let Some(credentials) = self.auth_state.credentials() else {
             bail!("Attempted to retrieve access token when user is logged out");
@@ -356,6 +360,8 @@ impl AuthClient for ServerApi {
         &self,
         auth_token: Option<&'a str>,
     ) -> Result<GqlUserOutput> {
+        ensure_warp_server_enabled()?;
+
         let variables = GetUserVariables {
             request_context: get_request_context(),
         };
@@ -554,6 +560,12 @@ impl AuthClient for ServerApi {
     async fn request_device_code(
         &self,
     ) -> StdResult<oauth2::StandardDeviceAuthorizationResponse, UserAuthenticationError> {
+        if is_warp_server_disabled() {
+            return Err(UserAuthenticationError::Unexpected(anyhow!(
+                "Warp server communication is disabled for this build"
+            )));
+        }
+
         self.oauth_client
             .exchange_device_code()
             .request_async(self.client.as_ref())
@@ -567,6 +579,12 @@ impl AuthClient for ServerApi {
         details: &oauth2::StandardDeviceAuthorizationResponse,
         timeout: Duration,
     ) -> StdResult<FirebaseToken, UserAuthenticationError> {
+        if is_warp_server_disabled() {
+            return Err(UserAuthenticationError::Unexpected(anyhow!(
+                "Warp server communication is disabled for this build"
+            )));
+        }
+
         let result = self
             .oauth_client
             .exchange_device_access_token(details)
@@ -696,6 +714,12 @@ fn fetch_auth_tokens(
     token: FirebaseToken,
 ) -> BoxFuture<'static, StdResult<FirebaseAuthTokens, UserAuthenticationError>> {
     Box::pin(async move {
+        if is_warp_server_disabled() {
+            return Err(UserAuthenticationError::Unexpected(anyhow!(
+                "Warp server communication is disabled for this build"
+            )));
+        }
+
         let firebase_api_key = ChannelState::firebase_api_key();
         let url = token.access_token_url(&firebase_api_key);
         let request_body = token.access_token_request_body();

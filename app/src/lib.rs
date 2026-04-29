@@ -2232,7 +2232,9 @@ fn launch(ctx: &mut warpui::AppContext, app_state: Option<AppState>, launch_mode
 
     // For now, we only specify application-level fallback fonts on web.
     #[cfg(target_family = "wasm")]
-    ctx.set_fallback_font_fn(font_fallback::fallback_font_fn);
+    if !server::server_api::is_warp_server_disabled() {
+        ctx.set_fallback_font_fn(font_fallback::fallback_font_fn);
+    }
 
     match &launch_mode {
         LaunchMode::App { .. } | LaunchMode::Test { .. } => {

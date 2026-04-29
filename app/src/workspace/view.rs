@@ -8298,7 +8298,9 @@ impl Workspace {
             MenuItem::Separator,
         ]);
 
-        if self.auth_state.is_anonymous_or_logged_out() {
+        if self.auth_state.is_anonymous_or_logged_out()
+            && !crate::server::server_api::is_warp_server_disabled()
+        {
             items.push(
                 MenuItemFields::new("Sign up")
                     .with_on_select_action(WorkspaceAction::SignupAnonymousUser)
@@ -12750,6 +12752,10 @@ impl Workspace {
                 ctx.notify();
             }
             SettingsViewEvent::SignupAnonymousUser => {
+                if crate::server::server_api::is_warp_server_disabled() {
+                    return;
+                }
+
                 self.initiate_user_signup(AnonymousUserSignupEntrypoint::SignUpButton, ctx);
             }
             SettingsViewEvent::Pane(_) | SettingsViewEvent::StartResize => {}
@@ -13857,6 +13863,10 @@ impl Workspace {
                 });
             }
             pane_group::Event::SignupAnonymousUser { entrypoint } => {
+                if crate::server::server_api::is_warp_server_disabled() {
+                    return;
+                }
+
                 self.initiate_user_signup(*entrypoint, ctx);
             }
             pane_group::Event::OpenThemeChooser => {
@@ -17817,6 +17827,10 @@ impl Workspace {
         &self,
         appearance: &Appearance,
     ) -> Box<dyn Element> {
+        if crate::server::server_api::is_warp_server_disabled() {
+            return Empty::new().finish();
+        }
+
         let default_styles = UiComponentStyles {
             font_color: Some(appearance.theme().active_ui_text_color().into()),
             font_size: Some(12.),
@@ -17858,6 +17872,10 @@ impl Workspace {
     }
 
     fn render_anonymous_sign_up_user_button(&self, appearance: &Appearance) -> Box<dyn Element> {
+        if crate::server::server_api::is_warp_server_disabled() {
+            return Empty::new().finish();
+        }
+
         let default_styles = UiComponentStyles {
             font_color: Some(appearance.theme().active_ui_text_color().into()),
             font_size: Some(12.),
@@ -20687,9 +20705,17 @@ impl TypedActionView for Workspace {
                 send_telemetry_from_ctx!(TelemetryEvent::InitiateReauth, ctx);
             }
             SignupAnonymousUser => {
+                if crate::server::server_api::is_warp_server_disabled() {
+                    return;
+                }
+
                 self.initiate_user_signup(AnonymousUserSignupEntrypoint::SignUpButton, ctx);
             }
             SignInAnonymousWebUser => {
+                if crate::server::server_api::is_warp_server_disabled() {
+                    return;
+                }
+
                 self.redirect_to_sign_in();
             }
             HandleConflictingWorkflow(workflow_id) => {

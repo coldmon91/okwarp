@@ -1,5 +1,5 @@
 use super::auth::AuthClient;
-use super::ServerApi;
+use super::{is_warp_ai_service_disabled, AIApiError, ServerApi};
 use crate::ai::generate_block_title::api::{GenerateBlockTitleRequest, GenerateBlockTitleResponse};
 use crate::server::{
     block::{Block, DisplaySetting},
@@ -145,6 +145,10 @@ impl BlockClient for ServerApi {
         &self,
         request: GenerateBlockTitleRequest,
     ) -> Result<GenerateBlockTitleResponse, anyhow::Error> {
+        if is_warp_ai_service_disabled() {
+            return Err(anyhow!(AIApiError::WarpAiServiceDisabled));
+        }
+
         let auth_token = self.get_or_refresh_access_token().await?;
         let request_builder = self.client.post(format!(
             "{}/ai/generate_block_title",

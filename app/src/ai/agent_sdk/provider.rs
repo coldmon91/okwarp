@@ -38,6 +38,12 @@ impl ProviderCommandRunner {
         personal: bool,
         ctx: &mut ModelContext<Self>,
     ) -> anyhow::Result<()> {
+        if !ChannelState::is_warp_server_enabled() {
+            return Err(anyhow::anyhow!(
+                "Provider setup is disabled because Warp server communication is disabled"
+            ));
+        }
+
         // Construct the OAuth connect URL
         let server_url = ChannelState::server_root_url();
 

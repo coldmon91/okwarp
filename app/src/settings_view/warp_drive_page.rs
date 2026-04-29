@@ -63,6 +63,10 @@ impl TypedActionView for WarpDriveSettingsPageView {
                 ctx.notify();
             }
             WarpDriveSettingsPageAction::SignUp => {
+                if crate::server::server_api::is_warp_server_disabled() {
+                    return;
+                }
+
                 ctx.emit(WarpDriveSettingsPageEvent::SignUp);
             }
             WarpDriveSettingsPageAction::OpenUrl(url) => {
@@ -124,6 +128,7 @@ impl SettingsWidget for WarpDriveHeaderWidget {
 
     fn should_render(&self, app: &AppContext) -> bool {
         FeatureFlag::SkipFirebaseAnonymousUser.is_enabled()
+            && !crate::server::server_api::is_warp_server_disabled()
             && AuthStateProvider::as_ref(app)
                 .get()
                 .is_anonymous_or_logged_out()

@@ -1,6 +1,7 @@
 use crate::ai::agent::api::RequestParams;
 use crate::ai::blocklist::SessionContext;
 use crate::ai::llms::LLMId;
+use ai::api_keys::OpenAICompatibleProviderConfig;
 use warp_core::features::FeatureFlag;
 use warp_multi_agent_api as api;
 
@@ -28,6 +29,7 @@ fn request_params_with_ask_user_question_enabled(ask_user_question_enabled: bool
         planning_enabled: true,
         should_redact_secrets: false,
         api_keys: None,
+        openai_compatible_provider: OpenAICompatibleProviderConfig::default(),
         allow_use_of_warp_credits_with_byok: false,
         autonomy_level: api::AutonomyLevel::Supervised,
         isolation_level: api::IsolationLevel::None,

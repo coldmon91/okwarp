@@ -14,6 +14,7 @@ use warpui::{AppContext, Entity, SingletonEntity};
 use crate::{
     cloud_object::{GenericStringObjectFormat, JsonObjectType, ObjectType},
     report_error,
+    server::server_api::is_warp_server_disabled,
 };
 
 use super::{
@@ -89,6 +90,14 @@ impl AuthState {
             return state;
         }
 
+        if is_warp_server_disabled() {
+            let _ = PersistedUser::remove_from_secure_storage(ctx).map_err(|err| {
+                log::warn!("Unable to clear disabled Warp account credentials: {err:?}");
+            });
+            log::info!("Warp server communication is disabled; starting without account state");
+            return state;
+        }
+
         if let Some(api_key_value) = api_key {
             log::info!("Authenticating via API key");
             let formatted = if api_key_value.starts_with(API_KEY_PREFIX) {
@@ -139,6 +148,10 @@ impl AuthState {
 
     /// Determines the appropriate persistence action based on the current auth state.
     pub(super) fn persist_action(&self) -> PersistAction {
+        if is_warp_server_disabled() {
+            return PersistAction::Remove;
+        }
+
         let user = self.user.read().clone();
         let credentials = self.credentials.read().clone();
 

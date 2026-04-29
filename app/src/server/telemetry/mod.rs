@@ -94,6 +94,11 @@ impl TelemetryApi {
         let events = warpui::telemetry::flush_events();
         let event_count = events.len();
 
+        if !ChannelState::is_warp_server_enabled() {
+            log::info!("Dropping telemetry events because Warp server communication is disabled.");
+            return Ok(event_count);
+        }
+
         #[cfg(not(target_family = "wasm"))]
         if FeatureFlag::SendTelemetryToFile.is_enabled() {
             self.persist_events_to_telemetry_log_file(events.clone())?;
@@ -120,6 +125,13 @@ impl TelemetryApi {
         path: &Path,
         settings_snapshot: PrivacySettingsSnapshot,
     ) -> Result<()> {
+        if !ChannelState::is_warp_server_enabled() {
+            log::info!(
+                "Not flushing persisted events because Warp server communication is disabled."
+            );
+            return Ok(());
+        }
+
         if path.exists() {
             let file = File::open(path)?;
             let events: Vec<RudderBatchMessage> = serde_json::from_reader(file)?;
@@ -161,6 +173,12 @@ impl TelemetryApi {
         settings_snapshot: PrivacySettingsSnapshot,
         path: impl AsRef<Path>,
     ) -> Result<()> {
+        if !ChannelState::is_warp_server_enabled() {
+            log::info!("Not writing queued events because Warp server communication is disabled.");
+            clear_event_queue();
+            return Result::Ok(());
+        }
+
         if settings_snapshot.should_disable_telemetry() {
             log::info!("Not writing queued events to disk because telemetry is disabled.");
             return Result::Ok(());
@@ -240,6 +258,13 @@ impl TelemetryApi {
         settings_snapshot: PrivacySettingsSnapshot,
     ) -> impl Future<Output = Result<()>> + '_ {
         let work = async move {
+            if !ChannelState::is_warp_server_enabled() {
+                log::info!(
+                    "Not sending telemetry event because Warp server communication is disabled."
+                );
+                return Result::Ok(());
+            }
+
             if settings_snapshot.should_disable_telemetry() {
                 log::info!("Not sending telemetry event because telemetry is disabled.");
                 return Result::Ok(());
@@ -306,6 +331,13 @@ impl TelemetryApi {
     ) -> Result<()> {
         if messages.is_empty() {
             log::debug!("Dropping empty RudderStack telemetry batch");
+            return Ok(());
+        }
+
+        if !ChannelState::is_warp_server_enabled() {
+            log::info!(
+                "Dropping RudderStack telemetry batch because Warp server communication is disabled."
+            );
             return Ok(());
         }
 

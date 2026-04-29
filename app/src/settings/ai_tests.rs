@@ -1,9 +1,12 @@
 use super::*;
 use crate::{
     ai::request_usage_model::{RequestLimitInfo, RequestLimitRefreshDuration},
+    auth::AuthStateProvider,
     test_util::settings::initialize_settings_for_tests,
+    UserWorkspaces,
 };
 use chrono::Utc;
+use warp_core::features::FeatureFlag;
 use warp_graphql::scalars::time::ServerTimestamp;
 use warpui::{App, SingletonEntity};
 
@@ -28,6 +31,93 @@ fn create_test_request_limit_info(
         max_files_per_repo: 5000,
         embedding_generation_batch_size: 100,
     }
+}
+
+#[test]
+fn test_logged_out_ai_enablement_uses_byok_toggle() {
+    App::test((), |mut app| async move {
+        let _guard = FeatureFlag::SoloUserByok.override_enabled(true);
+        initialize_settings_for_tests(&mut app);
+        app.add_singleton_model(|_| AuthStateProvider::new_logged_out_for_test());
+        app.add_singleton_model(UserWorkspaces::default_mock);
+
+        AISettings::handle(&app).read(&app, |settings, ctx| {
+            assert!(settings.is_any_ai_enabled(ctx));
+        });
+
+        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+            assert!(settings.byok_ai_enabled.set_value(false, ctx).is_ok());
+        });
+
+        AISettings::handle(&app).read(&app, |settings, ctx| {
+            assert!(!settings.is_any_ai_enabled(ctx));
+        });
+    });
+}
+
+#[test]
+fn test_logged_out_byok_enablement_ignores_global_warp_ai_toggle() {
+    App::test((), |mut app| async move {
+        let _guard = FeatureFlag::SoloUserByok.override_enabled(true);
+        initialize_settings_for_tests(&mut app);
+        app.add_singleton_model(|_| AuthStateProvider::new_logged_out_for_test());
+        app.add_singleton_model(UserWorkspaces::default_mock);
+
+        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+            assert!(settings.is_any_ai_enabled.set_value(false, ctx).is_ok());
+            assert!(settings.byok_ai_enabled.set_value(true, ctx).is_ok());
+        });
+
+        AISettings::handle(&app).read(&app, |settings, ctx| {
+            assert!(settings.is_any_ai_enabled(ctx));
+        });
+    });
+}
+
+#[test]
+fn test_logged_in_ai_enablement_uses_global_warp_ai_toggle() {
+    App::test((), |mut app| async move {
+        let _guard = FeatureFlag::SoloUserByok.override_enabled(true);
+        initialize_settings_for_tests(&mut app);
+        app.add_singleton_model(|_| AuthStateProvider::new_for_test());
+        app.add_singleton_model(UserWorkspaces::default_mock);
+
+        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+            assert!(settings.is_any_ai_enabled.set_value(false, ctx).is_ok());
+            assert!(settings.byok_ai_enabled.set_value(true, ctx).is_ok());
+        });
+
+        AISettings::handle(&app).read(&app, |settings, ctx| {
+            assert!(!settings.is_any_ai_enabled(ctx));
+        });
+
+        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+            assert!(settings.is_any_ai_enabled.set_value(true, ctx).is_ok());
+            assert!(settings.byok_ai_enabled.set_value(false, ctx).is_ok());
+        });
+
+        AISettings::handle(&app).read(&app, |settings, ctx| {
+            assert!(settings.is_any_ai_enabled(ctx));
+        });
+    });
+}
+
+#[test]
+fn test_logged_out_byok_ai_requires_byok_policy() {
+    App::test((), |mut app| async move {
+        let _guard = FeatureFlag::SoloUserByok.override_enabled(false);
+        initialize_settings_for_tests(&mut app);
+        app.add_singleton_model(|_| AuthStateProvider::new_logged_out_for_test());
+        app.add_singleton_model(UserWorkspaces::default_mock);
+
+        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+            assert!(settings.byok_ai_enabled.set_value(true, ctx).is_ok());
+        });
+
+        AISettings::handle(&app).read(&app, |settings, ctx| {
+            assert!(!settings.is_any_ai_enabled(ctx));
+        });
+    });
 }
 
 // FocusedTerminalInfo Tests

@@ -6,7 +6,10 @@ use crate::{
     modal::MODAL_CORNER_RADIUS,
     network::NetworkStatus,
     report_error, send_telemetry_from_ctx, send_telemetry_sync_from_ctx,
-    server::telemetry::{AnonymousUserSignupEntrypoint, LoginEventSource, TelemetryEvent},
+    server::{
+        server_api::is_warp_server_disabled,
+        telemetry::{AnonymousUserSignupEntrypoint, LoginEventSource, TelemetryEvent},
+    },
     settings::{AISettings, PrivacySettings},
     themes::theme::Fill as ThemeFill,
     util::color::{darken, lighten},
@@ -23,7 +26,7 @@ use warpui::{
     clipboard::ClipboardContent,
     color::ColorU,
     elements::{
-        Align, Border, Container, CornerRadius, CrossAxisAlignment, Dismiss, Fill, Flex,
+        Align, Border, Container, CornerRadius, CrossAxisAlignment, Dismiss, Empty, Fill, Flex,
         MainAxisAlignment, MainAxisSize, MouseStateHandle, ParentElement, Radius, Stack,
     },
     fonts::Weight,
@@ -428,6 +431,10 @@ impl AuthViewBody {
         appearance: &Appearance,
         ui_builder: &UiBuilder,
     ) -> Box<dyn Element> {
+        if is_warp_server_disabled() {
+            return Empty::new().finish();
+        }
+
         let (button_color, button_variant) = action_button_color_and_variant(appearance);
         let button_styles = UiComponentStyles {
             font_size: Some(14.),
@@ -907,6 +914,10 @@ impl TypedActionView for AuthViewBody {
                 }
             }
             AuthViewBodyAction::Signup => {
+                if is_warp_server_disabled() {
+                    return;
+                }
+
                 // Send synchronously since this is an important event in the sign up funnel and we
                 // don't want to lose events if the user quits before the event queue is flushed.
                 send_telemetry_sync_from_ctx!(TelemetryEvent::SignUpButtonClicked, ctx);
@@ -918,6 +929,10 @@ impl TypedActionView for AuthViewBody {
                 });
             }
             AuthViewBodyAction::SignupAnonymousUser => {
+                if is_warp_server_disabled() {
+                    return;
+                }
+
                 let entrypoint = match self.variant {
                     AuthViewVariant::RequireLoginCloseable
                     | AuthViewVariant::ShareRequirementCloseable => {

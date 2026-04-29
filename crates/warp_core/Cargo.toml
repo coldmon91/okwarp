@@ -10,6 +10,7 @@ crash_reporting = ["dep:sentry", "dep:sentry-log"]
 integration_tests = []
 local_fs = []
 release_bundle = []
+solo_user_byok = []
 test-util = ["dep:mockito", "warp_features/test-util"]
 
 [dependencies]

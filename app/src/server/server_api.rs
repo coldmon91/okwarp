@@ -20,6 +20,7 @@ use crate::ai::predict::predict_am_queries::{PredictAMQueriesRequest, PredictAMQ
 use crate::ai::voice::transcribe::{TranscribeRequest, TranscribeResponse};
 use crate::auth::auth_manager::AuthManager;
 use crate::auth::auth_state::AuthState;
+use crate::auth::credentials::AuthToken;
 use crate::server::graphql::default_request_options;
 use crate::server::server_api::presigned_upload::HttpStatusError;
 use ai::AIClient;
@@ -75,6 +76,35 @@ const EXPERIMENT_ID_HEADER: &str = "X-Warp-Experiment-Id";
 /// errors with the same error code.
 /// See errors/http_error_codes.go on the server for possible values.
 const WARP_ERROR_CODE_HEADER: &str = "X-Warp-Error-Code";
+
+fn has_byo_api_keys_for_request(request: &warp_multi_agent_api::Request) -> bool {
+    request
+        .settings
+        .as_ref()
+        .and_then(|settings| settings.api_keys.as_ref())
+        .is_some_and(|api_keys| {
+            !api_keys.anthropic.is_empty()
+                || !api_keys.openai.is_empty()
+                || !api_keys.google.is_empty()
+                || !api_keys.open_router.is_empty()
+                || api_keys.aws_credentials.is_some()
+        })
+}
+
+pub(crate) fn is_warp_ai_service_disabled() -> bool {
+    is_warp_server_disabled() || cfg!(feature = "solo_user_byok")
+}
+
+pub(crate) fn is_warp_server_disabled() -> bool {
+    cfg!(feature = "solo_user_byok") || !ChannelState::is_warp_server_enabled()
+}
+
+pub(crate) fn ensure_warp_server_enabled() -> Result<()> {
+    if is_warp_server_disabled() {
+        anyhow::bail!("Warp server communication is disabled for this build");
+    }
+    Ok(())
+}
 
 /// An error indicating the user is out of credits. The server sends 429s to communicate this
 /// state, but if Cloud Run is overloaded, it can also send 429s that aren't credit-related.
@@ -169,6 +199,9 @@ pub enum AIApiError {
 
     #[error("No context found on context search.")]
     NoContextFound,
+
+    #[error("Warp AI service is disabled in BYOK-only mode.")]
+    WarpAiServiceDisabled,
 
     #[error("Failed with status code {0}: {1}")]
     ErrorStatus(http::StatusCode, String),
@@ -318,6 +351,7 @@ impl ErrorExt for AIApiError {
             AIApiError::QuotaLimit | AIApiError::ServerOverloaded | AIApiError::NoContextFound => {
                 false
             }
+            AIApiError::WarpAiServiceDisabled => false,
         }
     }
 }
@@ -526,6 +560,8 @@ impl ServerApi {
         };
 
         Box::pin(async move {
+            ensure_warp_server_enabled()?;
+
             let operation_name = operation.operation_name().map(Cow::into_owned);
             let auth_token = self
                 .get_or_refresh_access_token()
@@ -626,6 +662,8 @@ impl ServerApi {
     /// Unlike [`get_public_api`], this does not attempt JSON deserialization on the
     /// response body, allowing the caller to decode it however they need.
     async fn get_public_api_response(&self, path: &str) -> Result<http_client::Response> {
+        ensure_warp_server_enabled()?;
+
         let auth_token = self
             .get_or_refresh_access_token()
             .await
@@ -683,6 +721,8 @@ impl ServerApi {
         run_ids: &[String],
         since_sequence: i64,
     ) -> Result<http_client::EventSourceStream> {
+        ensure_warp_server_enabled()?;
+
         debug_assert!(!run_ids.is_empty(), "run_ids must not be empty");
         let auth_token = self
             .get_or_refresh_access_token()
@@ -720,6 +760,8 @@ impl ServerApi {
     where
         B: Serialize,
     {
+        ensure_warp_server_enabled()?;
+
         let auth_token = self
             .get_or_refresh_access_token()
             .await
@@ -816,6 +858,8 @@ impl ServerApi {
     where
         B: Serialize,
     {
+        ensure_warp_server_enabled()?;
+
         let auth_token = self
             .get_or_refresh_access_token()
             .await
@@ -847,6 +891,10 @@ impl ServerApi {
     /// Sends an authenticated empty POST request to /client/login, which signals to the server
     /// that the user is logged in.
     pub async fn notify_login(&self) {
+        if is_warp_server_disabled() {
+            return;
+        }
+
         match self.get_or_refresh_access_token().await {
             Ok(auth_token) => {
                 let url = format!("{}/client/login", ChannelState::server_root_url());
@@ -932,6 +980,10 @@ impl ServerApi {
         request: &GenerateAIInputSuggestionsRequest,
     ) -> Result<generate_ai_input_suggestions::GenerateAIInputSuggestionsResponseV2, AIApiError>
     {
+        if is_warp_ai_service_disabled() {
+            return Err(AIApiError::WarpAiServiceDisabled);
+        }
+
         let auth_token = self.get_or_refresh_access_token().await?;
 
         let request_builder = self.client.post(format!(
@@ -956,6 +1008,10 @@ impl ServerApi {
         &self,
         request: &GetRelevantFiles,
     ) -> Result<GetRelevantFilesResponse, AIApiError> {
+        if is_warp_ai_service_disabled() {
+            return Err(AIApiError::WarpAiServiceDisabled);
+        }
+
         let auth_token = self.get_or_refresh_access_token().await?;
 
         let request_builder = self.client.post(format!(
@@ -982,6 +1038,10 @@ impl ServerApi {
         &self,
         request: &GenerateAMQuerySuggestionsRequest,
     ) -> Result<generate_am_query_suggestions::GenerateAMQuerySuggestionsResponse, AIApiError> {
+        if is_warp_ai_service_disabled() {
+            return Err(AIApiError::WarpAiServiceDisabled);
+        }
+
         let auth_token = self.get_or_refresh_access_token().await?;
 
         cfg_if::cfg_if! {
@@ -1017,6 +1077,10 @@ impl ServerApi {
         &self,
         request: &PredictAMQueriesRequest,
     ) -> Result<PredictAMQueriesResponse, AIApiError> {
+        if is_warp_ai_service_disabled() {
+            return Err(AIApiError::WarpAiServiceDisabled);
+        }
+
         let auth_token = self.get_or_refresh_access_token().await?;
         let request_builder = self.client.post(format!(
             "{}/ai/predict_am_queries",
@@ -1041,6 +1105,12 @@ impl ServerApi {
         &self,
         request: &TranscribeRequest,
     ) -> Result<TranscribeResponse, TranscribeError> {
+        if is_warp_ai_service_disabled() {
+            return Err(TranscribeError::Other(anyhow::anyhow!(
+                AIApiError::WarpAiServiceDisabled
+            )));
+        }
+
         let auth_token = self.get_or_refresh_access_token().await?;
 
         let request_builder = self
@@ -1093,11 +1163,21 @@ impl ServerApi {
         request: &warp_multi_agent_api::Request,
     ) -> std::result::Result<AIOutputStream<warp_multi_agent_api::ResponseEvent>, Arc<AIApiError>>
     {
-        let auth_token = self
-            .get_or_refresh_access_token()
-            .await
-            .map_err(Into::into)
-            .map_err(Arc::new)?;
+        if is_warp_ai_service_disabled() {
+            return Err(Arc::new(AIApiError::WarpAiServiceDisabled));
+        }
+
+        let auth_token = match self.get_or_refresh_access_token().await {
+            Ok(auth_token) => auth_token,
+            Err(err) if has_byo_api_keys_for_request(request) => {
+                log::info!("Sending multi-agent BYOK request without Warp auth: {err:#}");
+                AuthToken::NoAuth
+            }
+            Err(err) => {
+                let api_error: AIApiError = err.into();
+                return Err(Arc::new(api_error));
+            }
+        };
 
         let is_passive = request.input.as_ref().is_some_and(|input| {
             matches!(
@@ -1199,6 +1279,8 @@ impl ServerApi {
     }
 
     pub async fn server_time(&self) -> Result<ServerTime> {
+        ensure_warp_server_enabled()?;
+
         if let Some(cached) = self.cached_server_time() {
             return Ok(cached);
         }
@@ -1240,6 +1322,8 @@ impl ServerApi {
         include_changelogs: bool,
         is_daily: bool,
     ) -> Result<ChannelVersions> {
+        ensure_warp_server_enabled()?;
+
         let mut url = Url::parse(&ChannelState::server_root_url())
             .expect("Should not fail to parse server root URL");
         if is_daily {

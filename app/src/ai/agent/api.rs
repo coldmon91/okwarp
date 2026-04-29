@@ -1,10 +1,11 @@
+mod byok_openai;
 pub(crate) mod convert_conversation;
 mod convert_from;
 mod convert_to;
 mod r#impl;
 
 pub use ai::agent::convert::ConvertToAPITypeError;
-use ai::api_keys::ApiKeyManager;
+use ai::api_keys::{ApiKeyManager, OpenAICompatibleProviderConfig};
 pub use convert_from::{
     user_inputs_from_messages, ConversionParams, ConvertAPIMessageToClientOutputMessage,
     MaybeAIAgentOutputMessage, MessageToAIAgentOutputMessageError,
@@ -115,6 +116,7 @@ pub struct RequestParams {
 
     /// User-provided API keys for AI providers (BYO API Key).
     pub api_keys: Option<warp_multi_agent_api::request::settings::ApiKeys>,
+    pub openai_compatible_provider: OpenAICompatibleProviderConfig,
     pub allow_use_of_warp_credits_with_byok: bool,
     pub autonomy_level: warp_multi_agent_api::AutonomyLevel,
     pub isolation_level: warp_multi_agent_api::IsolationLevel,
@@ -233,12 +235,16 @@ impl RequestParams {
         let should_redact_secrets = get_secret_obfuscation_mode(app).should_redact_secret();
 
         let user_workspaces = UserWorkspaces::as_ref(app);
-        let api_keys = ApiKeyManager::as_ref(app).api_keys_for_request(
-            user_workspaces.is_byo_api_key_enabled(),
-            user_workspaces.is_aws_bedrock_credentials_enabled(app),
-        );
-        let allow_use_of_warp_credits_with_byok =
-            *AISettings::as_ref(app).can_use_warp_credits_with_byok;
+        let is_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let include_byo_api_keys = user_workspaces.is_byo_api_key_enabled() && is_ai_enabled;
+        let include_aws_bedrock_credentials =
+            user_workspaces.is_aws_bedrock_credentials_enabled(app) && is_ai_enabled;
+        let api_keys = ApiKeyManager::as_ref(app)
+            .api_keys_for_request(include_byo_api_keys, include_aws_bedrock_credentials);
+        let openai_compatible_provider = ApiKeyManager::as_ref(app)
+            .keys()
+            .openai_compatible_provider_config();
+        let allow_use_of_warp_credits_with_byok = false;
 
         let app_execution_mode = AppExecutionMode::as_ref(app);
         let autonomy_level = if app_execution_mode.is_autonomous() {
@@ -298,6 +304,7 @@ impl RequestParams {
             planning_enabled: true,
             should_redact_secrets,
             api_keys,
+            openai_compatible_provider,
             allow_use_of_warp_credits_with_byok,
             autonomy_level,
             isolation_level,

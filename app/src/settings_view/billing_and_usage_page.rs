@@ -788,6 +788,10 @@ impl TypedActionView for BillingAndUsagePageView {
                 AdminActions::contact_support(ctx);
             }
             BillingAndUsagePageAction::SignupAnonymousUser => {
+                if crate::server::server_api::is_warp_server_disabled() {
+                    return;
+                }
+
                 ctx.emit(BillingAndUsagePageEvent::SignupAnonymousUser);
             }
             BillingAndUsagePageAction::AttemptLoginGatedUpgrade => {
@@ -3387,19 +3391,23 @@ impl PlanWidget {
             ..Default::default()
         };
 
-        let user_info = appearance
-            .ui_builder()
-            .button(
-                ButtonVariant::Accent,
-                self.ui_state_handles.anonymous_user_sign_up_button.clone(),
-            )
-            .with_style(button_styles)
-            .with_text_label("Sign up".to_owned())
-            .build()
-            .on_click(move |ctx, _, _| {
-                ctx.dispatch_typed_action(BillingAndUsagePageAction::SignupAnonymousUser);
-            })
-            .finish();
+        let user_info = if crate::server::server_api::is_warp_server_disabled() {
+            Empty::new().finish()
+        } else {
+            appearance
+                .ui_builder()
+                .button(
+                    ButtonVariant::Accent,
+                    self.ui_state_handles.anonymous_user_sign_up_button.clone(),
+                )
+                .with_style(button_styles)
+                .with_text_label("Sign up".to_owned())
+                .build()
+                .on_click(move |ctx, _, _| {
+                    ctx.dispatch_typed_action(BillingAndUsagePageAction::SignupAnonymousUser);
+                })
+                .finish()
+        };
 
         let mut plan_info = Flex::column()
             .with_main_axis_alignment(MainAxisAlignment::SpaceEvenly)

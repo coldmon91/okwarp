@@ -44,8 +44,8 @@ impl ChannelState {
             config: ChannelConfig {
                 app_id,
                 logfile_name: "".into(),
-                server_config: WarpServerConfig::production(),
-                oz_config: OzConfig::production(),
+                server_config: WarpServerConfig::disabled(),
+                oz_config: OzConfig::disabled(),
                 telemetry_config: None,
                 autoupdate_config: None,
                 crash_reporting_config: None,
@@ -57,6 +57,13 @@ impl ChannelState {
     pub fn new(channel: Channel, mut config: ChannelConfig) -> Self {
         if let Some(app_id) = app_id_from_bundle() {
             config.app_id = app_id;
+        }
+        if cfg!(feature = "solo_user_byok") || matches!(channel, Channel::Oss) {
+            config.server_config = WarpServerConfig::disabled();
+            config.oz_config = OzConfig::disabled();
+            config.telemetry_config = None;
+            config.autoupdate_config = None;
+            config.crash_reporting_config = None;
         }
         Self {
             channel,
@@ -82,9 +89,16 @@ impl ChannelState {
         cfg!(debug_assertions) || matches!(Self::channel(), Channel::Local | Channel::Dev)
     }
 
+    pub fn is_warp_server_enabled() -> bool {
+        !cfg!(feature = "solo_user_byok") && !matches!(Self::channel(), Channel::Oss)
+    }
+
     pub fn override_server_root_url(url: impl Into<Cow<'static, str>>) -> Result<(), ParseError> {
         let url = url.into();
         Url::parse(&url)?;
+        if !Self::is_warp_server_enabled() {
+            return Ok(());
+        }
         CHANNEL_STATE.lock().config.server_config.server_root_url = url;
         Ok(())
     }
@@ -92,6 +106,9 @@ impl ChannelState {
     pub fn override_ws_server_url(url: impl Into<Cow<'static, str>>) -> Result<(), ParseError> {
         let url = url.into();
         Url::parse(&url)?;
+        if !Self::is_warp_server_enabled() {
+            return Ok(());
+        }
         CHANNEL_STATE.lock().config.server_config.rtc_server_url = url;
         Ok(())
     }
@@ -101,6 +118,9 @@ impl ChannelState {
     ) -> Result<(), ParseError> {
         let url = url.into();
         Url::parse(&url)?;
+        if !Self::is_warp_server_enabled() {
+            return Ok(());
+        }
         CHANNEL_STATE
             .lock()
             .config
@@ -186,7 +206,7 @@ impl ChannelState {
     /// `telemetry_config: None`, in which case UI that controls telemetry
     /// should be hidden since the toggle has no effect.
     pub fn is_telemetry_available() -> bool {
-        CHANNEL_STATE.lock().config.telemetry_config.is_some()
+        Self::is_warp_server_enabled() && CHANNEL_STATE.lock().config.telemetry_config.is_some()
     }
 
     /// Returns whether this build has a crash reporting config and can therefore
@@ -194,10 +214,15 @@ impl ChannelState {
     /// `crash_reporting_config: None`, in which case UI that controls crash
     /// reporting should be hidden since the toggle has no effect.
     pub fn is_crash_reporting_available() -> bool {
-        CHANNEL_STATE.lock().config.crash_reporting_config.is_some()
+        Self::is_warp_server_enabled()
+            && CHANNEL_STATE.lock().config.crash_reporting_config.is_some()
     }
 
     pub fn releases_base_url() -> Cow<'static, str> {
+        if !Self::is_warp_server_enabled() {
+            return Cow::Borrowed("");
+        }
+
         CHANNEL_STATE
             .lock()
             .config
@@ -208,6 +233,10 @@ impl ChannelState {
     }
 
     pub fn firebase_api_key() -> Cow<'static, str> {
+        if !Self::is_warp_server_enabled() {
+            return Cow::Borrowed("");
+        }
+
         CHANNEL_STATE
             .lock()
             .config
@@ -217,6 +246,10 @@ impl ChannelState {
     }
 
     pub fn ws_server_url() -> Cow<'static, str> {
+        if !Self::is_warp_server_enabled() {
+            return WarpServerConfig::disabled().rtc_server_url;
+        }
+
         CHANNEL_STATE
             .lock()
             .config
@@ -251,12 +284,20 @@ impl ChannelState {
             if #[cfg(feature = "test-util")] {
                 Some(Cow::Borrowed("fake_session_sharing_url"))
             } else {
+                if !Self::is_warp_server_enabled() {
+                    return None;
+                }
+
                 CHANNEL_STATE.lock().config.server_config.session_sharing_server_url.clone()
             }
         }
     }
 
     pub fn oz_root_url() -> Cow<'static, str> {
+        if !Self::is_warp_server_enabled() {
+            return OzConfig::disabled().oz_root_url;
+        }
+
         CHANNEL_STATE.lock().config.oz_config.oz_root_url.clone()
     }
 
@@ -265,6 +306,10 @@ impl ChannelState {
             if #[cfg(feature = "test-util")] {
                 Cow::Owned(MOCK_SERVER_URL.clone())
             } else {
+                if !Self::is_warp_server_enabled() {
+                    return WarpServerConfig::disabled().server_root_url;
+                }
+
                 CHANNEL_STATE.lock().config.server_config.server_root_url.clone()
             }
         }

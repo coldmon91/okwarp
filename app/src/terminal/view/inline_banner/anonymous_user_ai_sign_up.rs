@@ -3,8 +3,8 @@ use crate::terminal::view::{InlineBannerId, TerminalAction};
 use crate::ui_components::buttons::icon_button;
 use crate::ui_components::icons::Icon as UiIcon;
 use warpui::elements::{
-    Container, CornerRadius, CrossAxisAlignment, Flex, Icon, MainAxisAlignment, MainAxisSize,
-    MouseStateHandle, ParentElement, Radius, Shrinkable, Text,
+    Container, CornerRadius, CrossAxisAlignment, Empty, Flex, Icon, MainAxisAlignment,
+    MainAxisSize, MouseStateHandle, ParentElement, Radius, Shrinkable, Text,
 };
 use warpui::ui_components::{
     button::ButtonVariant,
@@ -51,6 +51,10 @@ impl AnonymousUserAISignUpBannerState {
     }
 
     pub fn render(&self, appearance: &Appearance) -> Box<dyn Element> {
+        if crate::server::server_api::is_warp_server_disabled() {
+            return Empty::new().finish();
+        }
+
         render_three_column_inline_banner(
             appearance,
             TITLE,

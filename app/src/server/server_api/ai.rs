@@ -16,7 +16,7 @@ use warp_core::{features::FeatureFlag, report_error};
 use warp_multi_agent_api::ConversationData;
 
 use super::auth::AuthClient;
-use super::ServerApi;
+use super::{is_warp_ai_service_disabled, AIApiError, ServerApi};
 use crate::ai::agent::api::ServerConversationToken;
 use crate::ai::agent::conversation::{
     AIAgentConversationFormat, AIAgentHarness, AIAgentSerializedBlockFormat,
@@ -1961,6 +1961,10 @@ impl AIClient for ServerApi {
         &self,
         request: GenerateCodeReviewContentRequest,
     ) -> Result<GenerateCodeReviewContentResponse, anyhow::Error> {
+        if is_warp_ai_service_disabled() {
+            return Err(anyhow!(AIApiError::WarpAiServiceDisabled));
+        }
+
         let auth_token = self.get_or_refresh_access_token().await?;
         let request_builder = self.client.post(format!(
             "{}/ai/generate_code_review_content",

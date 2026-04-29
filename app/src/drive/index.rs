@@ -3916,6 +3916,10 @@ impl DriveIndex {
         appearance: &Appearance,
         ctx: &AppContext,
     ) -> Option<Box<dyn Element>> {
+        if crate::server::server_api::is_warp_server_disabled() {
+            return None;
+        }
+
         let personal_object_limits = self.auth_state.personal_object_limits()?;
 
         let num_workflows = CloudModel::as_ref(ctx)
@@ -5621,6 +5625,10 @@ impl TypedActionView for DriveIndex {
                 );
             }
             DriveIndexAction::SignupAnonymousUser => {
+                if crate::server::server_api::is_warp_server_disabled() {
+                    return;
+                }
+
                 let entrypoint = AnonymousUserSignupEntrypoint::SignUpButton;
                 AuthManager::handle(ctx).update(ctx, |auth_manager, ctx| {
                     auth_manager.initiate_anonymous_user_linking(entrypoint, ctx);

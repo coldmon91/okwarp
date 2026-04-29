@@ -120,6 +120,12 @@ impl RemoteTransport for SshTransport {
     fn install_binary(&self) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> {
         let socket_path = self.socket_path.clone();
         Box::pin(async move {
+            if !warp_core::channel::ChannelState::is_warp_server_enabled() {
+                return Err(String::from(
+                    "Remote server binary download is disabled for this build",
+                ));
+            }
+
             let script = setup::install_script();
             log::info!(
                 "Installing remote server binary to {}",

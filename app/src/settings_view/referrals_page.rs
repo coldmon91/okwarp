@@ -27,9 +27,9 @@ use crate::{
 use warpui::{
     clipboard::ClipboardContent,
     elements::{
-        Align, Border, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Element, Fill,
-        Flex, FormattedTextElement, HighlightedHyperlink, Icon, MainAxisSize, MouseStateHandle,
-        ParentElement, Radius, Rect, Shrinkable,
+        Align, Border, ConstrainedBox, Container, CornerRadius, CrossAxisAlignment, Element, Empty,
+        Fill, Flex, FormattedTextElement, HighlightedHyperlink, Icon, MainAxisSize,
+        MouseStateHandle, ParentElement, Radius, Rect, Shrinkable,
     },
     fonts::Weight,
     ui_components::{
@@ -439,6 +439,10 @@ impl TypedActionView for ReferralsPageView {
             ReferralsPageAction::CopyLink => self.copy_link(ctx),
             ReferralsPageAction::SendEmailInvite => self.send_email_invite(ctx),
             ReferralsPageAction::SignupAnonymousUser => {
+                if crate::server::server_api::is_warp_server_disabled() {
+                    return;
+                }
+
                 ctx.emit(ReferralsPageEvent::SignupAnonymousUser)
             }
         }
@@ -499,11 +503,14 @@ impl ReferralsWidget {
             .get()
             .is_anonymous_or_logged_out();
 
-        let invite_or_signup_section = if is_anonymous {
-            self.render_signup_section(appearance)
-        } else {
-            self.render_send_invite_section(view, appearance)
-        };
+        let invite_or_signup_section =
+            if is_anonymous && crate::server::server_api::is_warp_server_disabled() {
+                Empty::new().finish()
+            } else if is_anonymous {
+                self.render_signup_section(appearance)
+            } else {
+                self.render_send_invite_section(view, appearance)
+            };
 
         Flex::column()
             .with_child(

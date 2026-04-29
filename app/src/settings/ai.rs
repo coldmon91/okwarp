@@ -718,6 +718,16 @@ define_settings_group!(AISettings, settings: [
         toml_path: "agents.warp_agent.is_any_ai_enabled",
         description: "Controls whether all AI features are enabled.",
     },
+    // Enables AI features for signed-out BYOK users. This does not enable Warp credits.
+    byok_ai_enabled: ByokAiEnabled {
+        type: bool,
+        default: true,
+        supported_platforms: SupportedPlatforms::ALL,
+        sync_to_cloud: SyncToCloud::Never,
+        private: false,
+        toml_path: "cloud_platform.third_party_api_keys.byok_ai_enabled",
+        description: "Controls whether BYOK-only AI features are enabled when signed out.",
+    },
     // This field should not be referenced directly to lookup active AI enablement -- use the
     // `is_active_ai_enabled()` getter.
     is_active_ai_enabled_internal: IsActiveAIEnabled {
@@ -1496,15 +1506,21 @@ impl AISettings {
         contains_remote_blocks || contains_restored_remote_blocks
     }
 
-    pub fn is_any_ai_enabled(&self, app: &AppContext) -> bool {
-        // Disable AI for anonymous and logged-out users.
-        let is_anonymous_or_logged_out = AuthStateProvider::as_ref(app)
-            .get()
-            .is_anonymous_or_logged_out();
+    fn is_byok_ai_enabled_without_warp_account(&self, app: &AppContext) -> bool {
+        *self.byok_ai_enabled && UserWorkspaces::as_ref(app).is_byo_api_key_enabled()
+    }
 
-        *self.is_any_ai_enabled
-            && !is_anonymous_or_logged_out
-            && !self.is_ai_disabled_due_to_remote_session_org_policy(app)
+    pub fn is_any_ai_enabled(&self, app: &AppContext) -> bool {
+        let is_allowed_by_auth_state = if AuthStateProvider::as_ref(app)
+            .get()
+            .is_anonymous_or_logged_out()
+        {
+            self.is_byok_ai_enabled_without_warp_account(app)
+        } else {
+            *self.is_any_ai_enabled
+        };
+
+        is_allowed_by_auth_state && !self.is_ai_disabled_due_to_remote_session_org_policy(app)
     }
 
     pub fn default_session_mode(&self, app: &AppContext) -> DefaultSessionMode {

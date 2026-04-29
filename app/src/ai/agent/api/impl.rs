@@ -1,6 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{ai::agent::redaction, terminal::model::session::SessionType};
+use crate::{
+    ai::agent::{api::byok_openai, redaction},
+    server::server_api::is_warp_ai_service_disabled,
+    terminal::model::session::SessionType,
+};
 use futures_util::StreamExt;
 use warp_core::features::FeatureFlag;
 use warp_multi_agent_api as api;
@@ -20,7 +24,7 @@ pub async fn generate_multi_agent_output(
         .unwrap_or_else(|| get_supported_tools(&params));
     let supported_cli_agent_tools = get_supported_cli_agent_tools(&params);
     let mut logging_metadata = HashMap::new();
-    if let Some(metadata) = params.metadata {
+    if let Some(metadata) = params.metadata.as_ref() {
         logging_metadata.insert(
             "is_autodetected_user_query".to_owned(),
             prost_types::Value {
@@ -49,6 +53,10 @@ pub async fn generate_multi_agent_output(
 
     if params.should_redact_secrets {
         redaction::redact_inputs(&mut params.input);
+    }
+
+    if is_warp_ai_service_disabled() {
+        return byok_openai::generate_chat_output(server_api, params, cancellation_rx).await;
     }
 
     let mut api_keys = params.api_keys;
