@@ -29,6 +29,8 @@ mod link_detection;
 mod open_in_warp;
 mod pane_impl;
 mod passive_suggestions;
+#[cfg(test)]
+mod pending_ai_block_for_test;
 mod pending_user_query;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod plugin_instructions_block;
@@ -39,6 +41,7 @@ pub mod ssh_file_upload;
 pub(crate) mod ssh_remote_server_choice_view;
 pub(crate) mod ssh_remote_server_failed_banner;
 mod tab_metadata;
+mod terminal_question;
 #[cfg(any(test, feature = "integration_tests"))]
 mod testing;
 mod tooltips;
@@ -1027,32 +1030,6 @@ pub enum InlineBannerType {
     AnonymousUserAISignUp,
     AwsBedrockLogin,
     AwsCliNotInstalled,
-}
-
-impl InlineBannerType {
-    /// Returns whether this banner type should be visible when agent view is active.
-    /// Exhaustive match ensures new banner types must define their visibility.
-    pub fn is_visible_in_agent_view(&self) -> bool {
-        match self {
-            // Agent-related banners: visible in agent view
-            Self::PromptSuggestions
-            | Self::CodebaseIndexSpeedbump
-            | Self::AgentModeSetup
-            | Self::AnonymousUserAISignUp
-            | Self::AwsBedrockLogin
-            | Self::AwsCliNotInstalled => true,
-            // Terminal-context banners: hidden in agent view
-            Self::NotificationsDiscovery
-            | Self::NotificationsError
-            | Self::Ssh
-            | Self::AliasExpansion
-            | Self::SharedSessionStart
-            | Self::SharedSessionEnd
-            | Self::ShellProcessTerminated
-            | Self::OpenInWarp
-            | Self::VimMode => false,
-        }
-    }
 }
 
 /// An inline banner with its unique ID and type metadata.
@@ -2400,9 +2377,6 @@ pub struct TerminalView {
     /// The current scroll position.
     scroll_position: ScrollState,
 
-    /// Cached scroll position from before entering agent view, used to restore on exit.
-    scroll_position_before_entering_agent_view: Option<ScrollPosition>,
-
     /// Scroll state for scrolling vertically in the blocklist.
     blocklist_vertical_scroll_state: ScrollStateHandle,
 
@@ -2989,6 +2963,10 @@ impl TerminalView {
                     // Clear prompt suggestions shown in the context of the terminal mode or prior agent view.
                     me.clear_prompt_suggestions(ctx);
                     match display_mode {
+                        // A terminal question leaves the screen as is; the header only describes a
+                        // long-running command.
+                        AgentViewDisplayMode::Inline
+                            if matches!(origin, AgentViewEntryOrigin::TerminalQuestion) => {}
                         AgentViewDisplayMode::Inline => {
                             // Insert the inline agent view header as rich content
                             let header_view = ctx.add_view(|ctx| {
@@ -3082,10 +3060,7 @@ impl TerminalView {
                                 );
                             }
 
-                            // On agent-view-enter, we want to scroll to the bottom of the view
-                            // (and save the current scroll position so we can get back to it when we exit the agent view).
-                            me.scroll_position_before_entering_agent_view =
-                                Some(me.scroll_position.position());
+                            // The conversation continues at the bottom of the shared scroll.
                             me.update_scroll_position_locking(
                                 ScrollPositionUpdate::AfterEnterAgentView,
                                 ctx,
@@ -3136,16 +3111,6 @@ impl TerminalView {
                         me.rich_content_views
                             .retain(|view| view.view_id() != view_id_to_remove);
                         ctx.notify();
-                    }
-
-                    // On exit-agent-view, we go back to the scroll position that we had when we entered.
-                    if let Some(saved_position) =
-                        me.scroll_position_before_entering_agent_view.take()
-                    {
-                        me.update_scroll_position_locking(
-                            ScrollPositionUpdate::AfterExitAgentView { saved_position },
-                            ctx,
-                        );
                     }
 
                     let has_init_steps = me.has_init_steps_for_conversation(*conversation_id);
@@ -3206,14 +3171,15 @@ impl TerminalView {
                     let has_existing_lrc_block =
                         me.has_existing_lrc_agent_view_block(*conversation_id);
 
-                    let should_insert = (!me
-                        .last_visible_item_is_agent_view_block_for_conversation(*conversation_id)
+                    // Only LRC conversations need an entry block: their content is rendered over
+                    // the long-running block, while other conversations stay visible in the scroll.
+                    let should_insert = matches!(origin, AgentViewEntryOrigin::LongRunningCommand)
+                        && !me.last_visible_item_is_agent_view_block_for_conversation(
+                            *conversation_id,
+                        )
                         && (has_init_steps || was_modified)
                         && !is_exit_due_to_user_takeover_of_lrc
-                        && !has_existing_lrc_block)
-                        // If the agent view was entered via accepting a 'new conversation
-                        // speedbump', an entry block should always be inserted.
-                        || matches!(origin, AgentViewEntryOrigin::AgentRequestedNewConversation);
+                        && !has_existing_lrc_block;
                     if should_insert {
                         me.insert_agent_view_entry_block(
                             AgentViewEntryBlockParams {
@@ -4022,7 +3988,6 @@ impl TerminalView {
             snackbar_header_state: Default::default(),
             colors,
             scroll_position: ScrollState::new(ScrollPosition::FollowsBottomOfMostRecentBlock),
-            scroll_position_before_entering_agent_view: None,
             blocklist_vertical_scroll_state: Default::default(),
             alt_screen_vertical_scroll_state: Default::default(),
             alt_screen_scroll_top: Lines::zero(),
@@ -4668,6 +4633,7 @@ impl TerminalView {
                 if let Some(callback) = queued_prompt {
                     callback(self, reason, ctx);
                 }
+                self.finish_terminal_question(*conversation_id, ctx);
             }
 
             // If the most recent action in the current interaction turn created or updated a plan
@@ -5655,13 +5621,14 @@ impl TerminalView {
         self.usage_footer_view_ids
             .insert(source_ai_block_view_id, usage_view.id());
 
-        let agent_view_conversation_id = self
-            .agent_view_controller
-            .as_ref(ctx)
-            .agent_view_state()
-            .active_conversation_id();
-
-        let item = RichContentItem::new(None, usage_view.id(), agent_view_conversation_id, false);
+        let agent_view_state = self.agent_view_controller.as_ref(ctx).agent_view_state();
+        let agent_view_conversation_id = agent_view_state.active_conversation_id();
+        let item = RichContentItem::new_for_agent_view_state(
+            None,
+            usage_view.id(),
+            agent_view_conversation_id,
+            agent_view_state,
+        );
 
         let mut model = self.model.lock();
         let inserted = model.block_list_mut().insert_rich_content_after_item(
@@ -8750,6 +8717,10 @@ impl TerminalView {
 
         // Return early if we've run out of AI usage.
         if !AIRequestUsageModel::as_ref(ctx).has_any_ai_remaining(ctx) {
+            return false;
+        }
+
+        if !self.can_offer_prompt_suggestions(ctx) {
             return false;
         }
 
@@ -13694,7 +13665,7 @@ impl TerminalView {
         server_request_token: Option<String>,
         ctx: &mut ViewContext<Self>,
     ) {
-        if prompt.is_empty() {
+        if prompt.is_empty() || !self.can_offer_prompt_suggestions(ctx) {
             return;
         }
 
@@ -13943,6 +13914,12 @@ impl TerminalView {
         );
     }
 
+    /// Prompt suggestions never start a conversation: they are offered only inside an active
+    /// agent conversation.
+    fn can_offer_prompt_suggestions(&self, ctx: &AppContext) -> bool {
+        !FeatureFlag::AgentView.is_enabled() || self.agent_view_controller.as_ref(ctx).is_active()
+    }
+
     fn on_legacy_prompt_suggestion_generated(
         &mut self,
         prompt_suggestion: AgentModePromptSuggestion,
@@ -13953,7 +13930,7 @@ impl TerminalView {
     ) {
         match prompt_suggestion {
             AgentModePromptSuggestion::Success(suggestion) => {
-                if suggestion.prompt.is_empty() {
+                if suggestion.prompt.is_empty() || !self.can_offer_prompt_suggestions(ctx) {
                     return;
                 }
 
@@ -19749,12 +19726,18 @@ impl TerminalView {
                 initial_prompt,
                 conversation_id,
                 origin,
-            } => match conversation_id {
+            } => match conversation_id.or_else(|| {
+                // A prompt submitted from the input continues the last conversation; explicit
+                // entry points (Cmd-Enter, `/agent`, ...) start a new one.
+                matches!(origin, AgentViewEntryOrigin::Input { .. })
+                    .then(|| self.conversation_to_continue(ctx))
+                    .flatten()
+            }) {
                 Some(id) => {
                     self.enter_agent_view_for_conversation(
                         initial_prompt.clone(),
                         *origin,
-                        *id,
+                        id,
                         ctx,
                     );
                 }
@@ -24898,6 +24881,11 @@ impl TypedActionView for TerminalView {
                     }
                     self.tag_in_agent_for_user_long_running_command(ctx);
                 } else {
+                    // Agent input mode only exists inside a conversation, so switching to it from
+                    // the terminal opens a one-shot terminal question (no screen switch).
+                    if self.can_open_terminal_question(ctx) {
+                        self.open_terminal_question(ctx);
+                    }
                     self.input.update(ctx, |input, ctx| {
                         input.set_input_mode_agent(false, ctx);
                     });
@@ -24937,6 +24925,16 @@ impl TypedActionView for TerminalView {
                             controller.exit_agent_view(ctx);
                         });
                     }
+                } else if self
+                    .agent_view_controller
+                    .as_ref(ctx)
+                    .agent_view_state()
+                    .is_terminal_question()
+                {
+                    // Leaving agent input mode cancels the question; exiting restores the input.
+                    self.agent_view_controller.update(ctx, |controller, ctx| {
+                        controller.exit_agent_view(ctx);
+                    });
                 } else {
                     self.input.update(ctx, |input, ctx| {
                         input.set_input_mode_terminal(true, ctx);

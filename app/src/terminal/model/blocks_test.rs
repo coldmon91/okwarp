@@ -1348,12 +1348,43 @@ fn test_remove_rich_content_block() {
         .any(|item| matches!(&item, BlockHeightItem::RichContent { .. })));
 }
 
+fn agent_view_state_for_test(
+    conversation_id: AIConversationId,
+    display_mode: AgentViewDisplayMode,
+) -> AgentViewState {
+    AgentViewState::Active {
+        conversation_id,
+        origin: AgentViewEntryOrigin::Input {
+            was_prompt_autodetected: false,
+        },
+        display_mode,
+        original_conversation_length: 0,
+    }
+}
+
+fn rich_content_item_for_view(
+    block_list: &BlockList,
+    view_id: EntityId,
+) -> Option<RichContentItem> {
+    block_list
+        .block_heights()
+        .items()
+        .iter()
+        .find_map(|item| match item {
+            BlockHeightItem::RichContent(rich_content) if rich_content.view_id == view_id => {
+                Some(*rich_content)
+            }
+            _ => None,
+        })
+}
+
 #[test]
-fn test_conversation_scoped_rich_content_hidden_outside_fullscreen_agent_view() {
-    FeatureFlag::AgentView.set_enabled(true);
+fn test_conversation_scoped_rich_content_visible_in_every_agent_view_state() {
+    let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
     let mut block_list =
         new_bootstrapped_block_list(None, None, ChannelEventListener::new_for_test());
     let conversation_id = AIConversationId::new();
+    let other_conversation_id = AIConversationId::new();
     let view_id = EntityId::new();
 
     block_list.append_rich_content(
@@ -1361,69 +1392,149 @@ fn test_conversation_scoped_rich_content_hidden_outside_fullscreen_agent_view() 
         false,
     );
 
-    block_list.set_agent_view_state(AgentViewState::Active {
-        conversation_id,
-        origin: AgentViewEntryOrigin::Input {
-            was_prompt_autodetected: false,
-        },
-        display_mode: AgentViewDisplayMode::FullScreen,
-        original_conversation_length: 0,
-    });
+    for state in [
+        agent_view_state_for_test(conversation_id, AgentViewDisplayMode::FullScreen),
+        agent_view_state_for_test(other_conversation_id, AgentViewDisplayMode::FullScreen),
+        agent_view_state_for_test(conversation_id, AgentViewDisplayMode::Inline),
+        AgentViewState::Inactive,
+    ] {
+        block_list.set_agent_view_state(state.clone());
 
-    let item_visible_in_fullscreen =
-        block_list
-            .block_heights()
-            .items()
-            .iter()
-            .find_map(|item| match item {
-                BlockHeightItem::RichContent(rich_content) if rich_content.view_id == view_id => {
-                    Some(*rich_content)
-                }
-                _ => None,
-            });
-    assert!(item_visible_in_fullscreen.is_some());
-    assert!(item_visible_in_fullscreen.is_some_and(|item| !item.should_hide));
-    assert!(item_visible_in_fullscreen
-        .is_some_and(|item| item.last_laid_out_height > BlockHeight::zero()));
+        let item = rich_content_item_for_view(&block_list, view_id);
+        assert!(
+            item.is_some_and(|item| !item.should_hide),
+            "rich content should be visible in {state:?}"
+        );
+    }
+}
+
+#[test]
+fn test_inline_agent_view_rich_content_visible_only_in_its_fullscreen_conversation() {
+    let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+    let mut block_list =
+        new_bootstrapped_block_list(None, None, ChannelEventListener::new_for_test());
+    let conversation_id = AIConversationId::new();
+    let other_conversation_id = AIConversationId::new();
+    let view_id = EntityId::new();
+
+    let inline_state = agent_view_state_for_test(conversation_id, AgentViewDisplayMode::Inline);
+    block_list.set_agent_view_state(inline_state.clone());
+    block_list.append_rich_content(
+        RichContentItem::new_for_agent_view_state(
+            None,
+            view_id,
+            Some(conversation_id),
+            &inline_state,
+        ),
+        false,
+    );
+    assert!(rich_content_item_for_view(&block_list, view_id).is_some_and(|item| item.should_hide));
 
     block_list.set_agent_view_state(AgentViewState::Inactive);
+    assert!(rich_content_item_for_view(&block_list, view_id).is_some_and(|item| item.should_hide));
 
-    let item_hidden_in_terminal_mode =
-        block_list
-            .block_heights()
-            .items()
-            .iter()
-            .find_map(|item| match item {
-                BlockHeightItem::RichContent(rich_content) if rich_content.view_id == view_id => {
-                    Some(*rich_content)
-                }
-                _ => None,
-            });
-    assert!(item_hidden_in_terminal_mode.is_some());
-    assert!(item_hidden_in_terminal_mode.is_some_and(|item| item.should_hide));
+    block_list.set_agent_view_state(agent_view_state_for_test(
+        other_conversation_id,
+        AgentViewDisplayMode::FullScreen,
+    ));
+    assert!(rich_content_item_for_view(&block_list, view_id).is_some_and(|item| item.should_hide));
 
-    block_list.set_agent_view_state(AgentViewState::Active {
+    block_list.set_agent_view_state(agent_view_state_for_test(
         conversation_id,
-        origin: AgentViewEntryOrigin::Input {
-            was_prompt_autodetected: false,
-        },
+        AgentViewDisplayMode::FullScreen,
+    ));
+    assert!(rich_content_item_for_view(&block_list, view_id).is_some_and(|item| !item.should_hide));
+}
+
+#[test]
+fn test_terminal_question_answer_stays_visible_and_prompt_block_untagged() {
+    let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+    let mut block_list =
+        new_bootstrapped_block_list(None, None, ChannelEventListener::new_for_test());
+    let conversation_id = AIConversationId::new();
+    let view_id = EntityId::new();
+
+    let question_state = AgentViewState::Active {
+        conversation_id,
+        origin: AgentViewEntryOrigin::TerminalQuestion,
         display_mode: AgentViewDisplayMode::Inline,
         original_conversation_length: 0,
-    });
+    };
+    block_list.set_agent_view_state(question_state.clone());
+    block_list.append_rich_content(
+        RichContentItem::new_for_agent_view_state(
+            None,
+            view_id,
+            Some(conversation_id),
+            &question_state,
+        ),
+        false,
+    );
+    assert!(rich_content_item_for_view(&block_list, view_id)
+        .is_some_and(|item| !item.is_inline_agent_view_content && !item.should_hide));
+    assert_eq!(
+        block_list.active_block().agent_view_visibility(),
+        &AgentViewVisibility::new_from_terminal()
+    );
 
-    let item_hidden_in_inline =
+    block_list.set_agent_view_state(AgentViewState::Inactive);
+    assert!(rich_content_item_for_view(&block_list, view_id).is_some_and(|item| !item.should_hide));
+}
+
+#[test]
+fn test_terminal_and_agent_blocks_visible_in_every_agent_view_state() {
+    let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+    let mut block_list =
+        new_bootstrapped_block_list(None, None, ChannelEventListener::new_for_test());
+    let conversation_id = AIConversationId::new();
+
+    let terminal_block_index = insert_block(&mut block_list, "terminal", "output");
+    block_list.set_agent_view_state(agent_view_state_for_test(
+        conversation_id,
+        AgentViewDisplayMode::FullScreen,
+    ));
+    let agent_block_index = insert_block(&mut block_list, "agent", "output");
+    assert!(matches!(
         block_list
-            .block_heights()
-            .items()
-            .iter()
-            .find_map(|item| match item {
-                BlockHeightItem::RichContent(rich_content) if rich_content.view_id == view_id => {
-                    Some(*rich_content)
-                }
-                _ => None,
-            });
-    assert!(item_hidden_in_inline.is_some());
-    assert!(item_hidden_in_inline.is_some_and(|item| item.should_hide));
+            .block_at(agent_block_index)
+            .unwrap()
+            .agent_view_visibility(),
+        AgentViewVisibility::Agent { .. }
+    ));
+
+    for state in [
+        agent_view_state_for_test(conversation_id, AgentViewDisplayMode::FullScreen),
+        agent_view_state_for_test(AIConversationId::new(), AgentViewDisplayMode::FullScreen),
+        agent_view_state_for_test(conversation_id, AgentViewDisplayMode::Inline),
+        AgentViewState::Inactive,
+    ] {
+        block_list.set_agent_view_state(state.clone());
+        for block_index in [terminal_block_index, agent_block_index] {
+            let block = block_list.block_at(block_index).unwrap();
+            assert!(
+                !block.is_empty(block_list.agent_view_state()),
+                "block {block_index:?} should be visible in {state:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_hidden_block_stays_hidden_in_agent_view() {
+    let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+    let mut block_list =
+        new_bootstrapped_block_list(None, None, ChannelEventListener::new_for_test());
+    let conversation_id = AIConversationId::new();
+
+    let block_index = insert_block(&mut block_list, "hidden", "output");
+    block_list.blocks_mut()[block_index.0].hide();
+
+    block_list.set_agent_view_state(agent_view_state_for_test(
+        conversation_id,
+        AgentViewDisplayMode::FullScreen,
+    ));
+    let block = block_list.block_at(block_index).unwrap();
+    assert!(block.is_empty(block_list.agent_view_state()));
 }
 
 #[test]
@@ -1562,7 +1673,7 @@ fn test_agent_origin_block_can_be_attached_to_other_conversation() {
     block_list.set_agent_view_state(AgentViewState::Inactive);
     let user_block_index = block_list.block_index_for_id(&user_block_id).unwrap();
     let user_block = block_list.block_at(user_block_index).unwrap();
-    assert!(user_block.is_empty(block_list.agent_view_state()));
+    assert!(!user_block.is_empty(block_list.agent_view_state()));
 }
 
 #[test]

@@ -2561,30 +2561,10 @@ impl AIBlock {
         //
         // This is typically the case for the initial exchange in a conversation started for a
         // 'passive' AI feature like suggested prompts.
-        if is_for_hidden_exchange {
-            return true;
-        }
-        if !FeatureFlag::AgentView.is_enabled() {
-            return false;
-        }
-
-        if let Some(active_conversation_id) = self
-            .agent_view_controller
-            .as_ref(app)
-            .agent_view_state()
-            .active_conversation_id()
-        {
-            // If the agent view is active, only AI blocks for the active agent view conversation
-            // should be visible.
-            active_conversation_id != self.client_ids.conversation_id
-        } else {
-            // If there is no active agent view, only passive, non-hidden (we checked for if the
-            // exchange is hidden already above) exchanges are rendered.
-            //
-            // These correspond to AI blocks with a successfully received suggested code diff or
-            // unit test suggestion.
-            !self.model.request_type(app).is_passive()
-        }
+        //
+        // The agent view state does not hide AI blocks: answers stay in the terminal scroll
+        // after the question or conversation closes.
+        is_for_hidden_exchange
     }
 
     pub fn is_passive_conversation(&self, app: &AppContext) -> bool {

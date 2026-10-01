@@ -294,7 +294,7 @@ impl TerminalView {
     ) {
         // Agent view entry blocks, inline agent view headers, and terminal zero state blocks
         // should not be associated with any conversation, as they always belong in the top-level
-        // terminal view and should be hidden while agent view is active.
+        // terminal view.
         let is_agent_view_scoped_terminal_content = matches!(
             metadata,
             Some(
@@ -305,30 +305,19 @@ impl TerminalView {
         );
         let is_use_agent_footer = handle.id() == self.use_agent_footer.id();
 
-        let (agent_view_conversation_id, should_hide) = if is_agent_view_scoped_terminal_content {
-            (None, self.agent_view_controller.as_ref(ctx).is_active())
+        let agent_view_state = self.agent_view_controller.as_ref(ctx).agent_view_state();
+        let agent_view_conversation_id = if is_agent_view_scoped_terminal_content {
+            None
         } else if is_use_agent_footer {
-            (
-                self.agent_view_controller
-                    .as_ref(ctx)
-                    .agent_view_state()
-                    .fullscreen_conversation_id(),
-                false,
-            )
+            agent_view_state.fullscreen_conversation_id()
         } else {
-            (
-                self.agent_view_controller
-                    .as_ref(ctx)
-                    .agent_view_state()
-                    .active_conversation_id(),
-                false,
-            )
+            agent_view_state.active_conversation_id()
         };
-        let item = RichContentItem::new(
+        let item = RichContentItem::new_for_agent_view_state(
             content_type,
             handle.id(),
             agent_view_conversation_id,
-            should_hide,
+            agent_view_state,
         );
 
         match position {

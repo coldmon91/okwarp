@@ -10,11 +10,10 @@ use warpui::{
     AppContext, ModelHandle,
 };
 
-use crate::{
-    ai::blocklist::agent_view::AgentViewDisplayMode,
-    terminal::{input::inline_menu::InlineMenuPositioner, model::index::Point as IndexPoint},
+use crate::terminal::{
+    input::inline_menu::InlineMenuPositioner, model::blocks::RichContentItem,
+    model::index::Point as IndexPoint,
 };
-use crate::{ai::blocklist::agent_view::AgentViewState, terminal::model::blocks::RichContentItem};
 
 use super::{
     block_list_element::{
@@ -237,9 +236,6 @@ pub enum ScrollPositionUpdate {
         index: TotalIndex,
     },
     AfterEnterAgentView,
-    AfterExitAgentView {
-        saved_position: ScrollPosition,
-    },
 }
 
 /// The direction that blocks flow in the viewport.
@@ -349,7 +345,6 @@ pub struct ViewportIter<'a> {
 
     /// The current input mode.
     input_mode: InputMode,
-    agent_view_state: &'a AgentViewState,
 
     /// The y-offset of the current block in lines from the viewport origin.
     top_of_current_block: Lines,
@@ -515,7 +510,6 @@ impl<'a> ViewportState<'a> {
                 ViewportIter {
                     block_heights_iter: Box::new(cursor),
                     input_mode: self.input_mode,
-                    agent_view_state: self.block_list.agent_view_state(),
                     top_of_current_block: top_of_block,
                     bottom_offset,
                     start_block_index: block_index,
@@ -535,7 +529,6 @@ impl<'a> ViewportState<'a> {
                 ViewportIter {
                     block_heights_iter: Box::new(cursor.rev()),
                     input_mode: self.input_mode,
-                    agent_view_state: self.block_list.agent_view_state(),
                     top_of_current_block: top_of_block,
                     bottom_offset,
                     start_block_index: block_index,
@@ -898,7 +891,6 @@ impl<'a> ViewportState<'a> {
                     scroll_lines: self.scroll_lines_from_scroll_top(scroll_top),
                 }
             }
-            ScrollPositionUpdate::AfterExitAgentView { saved_position } => saved_position,
         }
     }
 
@@ -2020,35 +2012,13 @@ impl Iterator for ViewportIter<'_> {
             }
 
             match item {
-                BlockHeightItem::RichContent(RichContentItem {
-                    agent_view_conversation_id: fullscreen_agent_view_conversation_id,
-                    ..
-                }) => match self.agent_view_state {
-                    AgentViewState::Active {
-                        conversation_id,
-                        display_mode: AgentViewDisplayMode::FullScreen,
-                        ..
-                    } => {
-                        // If currently in a fullscreen agent view, only return this item if its
-                        // conversation id matches that of the active agent view.
-                        if fullscreen_agent_view_conversation_id
-                            .is_some_and(|id| id == *conversation_id)
-                        {
-                            return next;
-                        }
+                // Terminal and conversation content share one scroll; the item's own visibility
+                // (set from the agent view state) decides whether it renders.
+                BlockHeightItem::RichContent(RichContentItem { should_hide, .. }) => {
+                    if !should_hide {
+                        return next;
                     }
-                    AgentViewState::Active {
-                        display_mode: AgentViewDisplayMode::Inline,
-                        ..
-                    }
-                    | AgentViewState::Inactive => {
-                        // If not in a fullscreen agent view, return the item only if it 'belongs'
-                        // to the terminal mode (represented as no `ai_conversation_id`).
-                        if fullscreen_agent_view_conversation_id.is_none() {
-                            return next;
-                        }
-                    }
-                },
+                }
                 _ => {
                     if !FeatureFlag::AgentView.is_enabled() || block_height.as_f64() > 0. {
                         return next;

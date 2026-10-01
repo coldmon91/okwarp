@@ -4,7 +4,7 @@ use crate::ai::agent::{conversation::AIConversationId, AIAgentActionId};
 use crate::ai::blocklist::SerializedBlockListItem;
 use crate::terminal::block_filter::BlockFilterQuery;
 
-use crate::ai::blocklist::agent_view::{AgentViewDisplayMode, AgentViewState};
+use crate::ai::blocklist::agent_view::AgentViewState;
 use crate::terminal::event::AfterBlockCompletedEvent;
 use crate::terminal::event_listener::ChannelEventListener;
 use crate::terminal::model::ansi;
@@ -83,6 +83,10 @@ pub struct RichContentItem {
     pub last_laid_out_height: BlockHeight,
     /// The conversation ID of the active agent view when this rich content was created, if any.
     pub agent_view_conversation_id: Option<AIConversationId>,
+    /// Conversation content created while the agent view was inline over a long-running command.
+    /// It is rendered over the long-running block, so the blocklist shows it only while its
+    /// conversation is open in the full agent view.
+    pub is_inline_agent_view_content: bool,
     pub should_hide: bool,
 }
 
@@ -91,15 +95,40 @@ impl RichContentItem {
         content_type: Option<RichContentType>,
         view_id: EntityId,
         agent_view_conversation_id: Option<AIConversationId>,
-        should_hide: bool,
+        is_inline_agent_view_content: bool,
     ) -> Self {
-        Self {
+        let mut item = Self {
             content_type,
             view_id,
             last_laid_out_height: BlockHeight::from(1.0),
             agent_view_conversation_id,
-            should_hide,
-        }
+            is_inline_agent_view_content,
+            should_hide: false,
+        };
+        item.should_hide = item.should_hide_for_agent_view_state(&AgentViewState::Inactive);
+        item
+    }
+
+    /// Creates an item for content inserted under `agent_view_state`; conversation content
+    /// created inside an inline agent view over a long-running command is marked as inline agent
+    /// view content. Terminal question answers belong in the blocklist.
+    pub fn new_for_agent_view_state(
+        content_type: Option<RichContentType>,
+        view_id: EntityId,
+        agent_view_conversation_id: Option<AIConversationId>,
+        agent_view_state: &AgentViewState,
+    ) -> Self {
+        let is_inline_agent_view_content = agent_view_state.is_inline()
+            && !agent_view_state.is_terminal_question()
+            && agent_view_conversation_id.is_some();
+        let mut item = Self::new(
+            content_type,
+            view_id,
+            agent_view_conversation_id,
+            is_inline_agent_view_content,
+        );
+        item.should_hide = item.should_hide_for_agent_view_state(agent_view_state);
+        item
     }
 
     #[cfg(test)]
@@ -111,23 +140,12 @@ impl RichContentItem {
         Self::new(content_type, view_id, agent_view_conversation_id, false)
     }
 
+    /// Rich content stays visible regardless of the agent view state, except inline agent view
+    /// content outside the full agent view of its own conversation.
     pub fn should_hide_for_agent_view_state(&self, agent_view_state: &AgentViewState) -> bool {
-        if !FeatureFlag::AgentView.is_enabled() {
-            return false;
-        }
-
-        match agent_view_state {
-            AgentViewState::Active {
-                conversation_id,
-                display_mode: AgentViewDisplayMode::FullScreen,
-                ..
-            } => Some(*conversation_id) != self.agent_view_conversation_id,
-            AgentViewState::Active {
-                display_mode: AgentViewDisplayMode::Inline,
-                ..
-            }
-            | AgentViewState::Inactive => self.agent_view_conversation_id.is_some(),
-        }
+        FeatureFlag::AgentView.is_enabled()
+            && self.is_inline_agent_view_content
+            && agent_view_state.fullscreen_conversation_id() != self.agent_view_conversation_id
     }
 }
 
@@ -1073,21 +1091,19 @@ impl BlockList {
             return;
         };
 
-        let agent_view_state = &self.agent_view_state;
         self.block_heights = {
             let mut cursor = self.block_heights.cursor::<TotalIndex, ()>();
             let mut new_tree = cursor.slice(&index, SeekBias::Right);
 
             if let Some(BlockHeightItem::RichContent(item)) = cursor.item() {
-                let should_hide = RichContentItem {
+                let updated_item = RichContentItem {
                     agent_view_conversation_id,
                     ..*item
-                }
-                .should_hide_for_agent_view_state(agent_view_state);
+                };
                 new_tree.push(BlockHeightItem::RichContent(RichContentItem {
-                    agent_view_conversation_id,
-                    should_hide,
-                    ..*item
+                    should_hide: updated_item
+                        .should_hide_for_agent_view_state(&self.agent_view_state),
+                    ..updated_item
                 }));
                 cursor.next();
             }
@@ -1497,15 +1513,15 @@ impl BlockList {
 
     /// Sets the agent view state for this blocklist.
     ///
-    /// With `FeatureFlag::AgentView` enabled, if the state is active, only blocks corresponding to
-    /// the active state's conversation ID are rendered. If inactive, only blocks with no conversation
-    /// ID (i.e. those executed in the top-level terminal context) are rendered.
+    /// The state tags the active block with the conversation it runs in; it does not change which
+    /// blocks are rendered.
     ///
     /// Do not call this method directly. Instead, use the `AgentViewController` to enter/exit the
     /// agent view.
     pub fn set_agent_view_state(&mut self, state: AgentViewState) {
         self.agent_view_state = state;
-        if !self.active_block().finished() {
+        // A terminal question runs no command, so the idle prompt block stays untagged.
+        if !self.active_block().finished() && !self.agent_view_state.is_terminal_question() {
             if let Some(id) = self.agent_view_state.active_conversation_id() {
                 // For inline agent views, add the conversation ID to Terminal variant
                 // instead of replacing with Agent variant
@@ -2049,24 +2065,15 @@ impl BlockList {
                         new_sum_tree.push(BlockHeightItem::SubshellSeparator {
                             separator_id: *separator_id,
                             height_when_visible,
-                            is_hidden: agent_view_state.is_fullscreen(),
+                            is_hidden: false,
                         });
                     }
-                    BlockHeightItem::RichContent(RichContentItem {
-                        content_type,
-                        view_id,
-                        agent_view_conversation_id,
-                        last_laid_out_height,
-                        ..
-                    }) => {
-                        let should_hide = RichContentItem {
-                            content_type: *content_type,
-                            view_id: *view_id,
-                            last_laid_out_height: *last_laid_out_height,
-                            agent_view_conversation_id: *agent_view_conversation_id,
-                            should_hide: false,
-                        }
-                        .should_hide_for_agent_view_state(agent_view_state);
+                    BlockHeightItem::RichContent(item) => {
+                        let RichContentItem {
+                            view_id,
+                            last_laid_out_height,
+                            ..
+                        } = item;
                         let updated_height = if let Some(updated_height) =
                             rich_content_heights.and_then(|heights| heights.get(view_id))
                         {
@@ -2079,11 +2086,9 @@ impl BlockList {
                         };
 
                         new_sum_tree.push(BlockHeightItem::RichContent(RichContentItem {
-                            content_type: *content_type,
-                            view_id: *view_id,
                             last_laid_out_height: updated_height,
-                            agent_view_conversation_id: *agent_view_conversation_id,
-                            should_hide,
+                            should_hide: item.should_hide_for_agent_view_state(agent_view_state),
+                            ..*item
                         }));
                     }
                     BlockHeightItem::RestoredBlockSeparator {
@@ -2095,8 +2100,7 @@ impl BlockList {
                             height_when_visible: *height_when_visible,
                             is_historical_conversation_restoration:
                                 *is_historical_conversation_restoration,
-                            // Don't show restored block separators in the agent view.
-                            is_hidden: agent_view_state.is_fullscreen(),
+                            is_hidden: false,
                         });
                     }
                     BlockHeightItem::InlineBanner {
@@ -2104,12 +2108,10 @@ impl BlockList {
                         height_when_visible: height,
                         ..
                     } => {
-                        let is_hidden = agent_view_state.is_fullscreen()
-                            && !banner.banner_type.is_visible_in_agent_view();
                         new_sum_tree.push(BlockHeightItem::InlineBanner {
                             banner: *banner,
                             height_when_visible: *height,
-                            is_hidden,
+                            is_hidden: false,
                         });
                     }
                 }

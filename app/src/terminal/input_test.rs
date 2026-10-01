@@ -6217,6 +6217,78 @@ fn test_terminal_only_ai_enter_enters_agent_view_and_clears_buffer() {
 }
 
 #[test]
+fn test_cmd_i_opens_terminal_question_and_images_attach_only_in_question() {
+    App::test((), |mut app| async move {
+        let _am_flag = FeatureFlag::AgentMode.override_enabled(true);
+        let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+
+        initialize_app(&mut app);
+
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+        let image_paths = || vec!["/tmp/okwarp-test-image.png".to_owned()];
+
+        // Terminal mode: images are not attached and no conversation starts.
+        let attached_in_terminal_mode = input.update(&mut app, |input, ctx| {
+            input.handle_pasted_or_dragdropped_image_filepaths(image_paths(), ctx)
+        });
+        assert_eq!(attached_in_terminal_mode, 0);
+        terminal.read(&app, |terminal, ctx| {
+            assert!(!terminal.agent_view_controller().as_ref(ctx).is_active());
+        });
+
+        // Cmd-I opens a terminal question in place and switches the input to agent mode.
+        terminal.update(&mut app, |terminal, ctx| {
+            terminal.handle_action(&TerminalAction::SetInputModeAgent, ctx);
+        });
+        terminal.read(&app, |terminal, ctx| {
+            let agent_view_state = terminal
+                .agent_view_controller()
+                .as_ref(ctx)
+                .agent_view_state();
+            assert!(agent_view_state.is_terminal_question());
+            assert!(!agent_view_state.is_fullscreen());
+        });
+        input.read(&app, |input, ctx| {
+            assert!(input.ai_input_model().as_ref(ctx).input_type().is_ai());
+        });
+
+        // Question: images attach.
+        let attached_in_question = input.update(&mut app, |input, ctx| {
+            input.handle_pasted_or_dragdropped_image_filepaths(image_paths(), ctx)
+        });
+        assert_eq!(attached_in_question, 1);
+    });
+}
+
+#[test]
+fn test_leaving_agent_input_mode_closes_terminal_question() {
+    App::test((), |mut app| async move {
+        let _am_flag = FeatureFlag::AgentMode.override_enabled(true);
+        let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+
+        initialize_app(&mut app);
+
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+
+        terminal.update(&mut app, |terminal, ctx| {
+            terminal.handle_action(&TerminalAction::SetInputModeAgent, ctx);
+        });
+        terminal.update(&mut app, |terminal, ctx| {
+            terminal.handle_action(&TerminalAction::SetInputModeTerminal, ctx);
+        });
+
+        terminal.read(&app, |terminal, ctx| {
+            assert!(!terminal.agent_view_controller().as_ref(ctx).is_active());
+        });
+        input.read(&app, |input, ctx| {
+            assert!(!input.ai_input_model().as_ref(ctx).input_type().is_ai());
+        });
+    });
+}
+
+#[test]
 fn test_terminal_only_escape_locks_shell_mode() {
     use crate::ai::blocklist::InputConfig;
 

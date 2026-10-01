@@ -9772,8 +9772,8 @@ impl Input {
         });
     }
 
-    /// Check if we can attach on filepaths paste or drag-drop
-    fn can_attach_on_filepaths_paste_or_dragdrop(&self, ctx: &mut ViewContext<Self>) -> bool {
+    /// Check if we can attach images on paste or drag-drop
+    fn can_attach_images_on_paste_or_dragdrop(&self, ctx: &mut ViewContext<Self>) -> bool {
         // Shared session viewers cannot attach images unless in cloud mode
         // with the CloudModeImageContext feature enabled.
         let is_viewer = self.model.lock().shared_session_status().is_viewer();
@@ -9797,12 +9797,18 @@ impl Input {
             return false;
         }
 
-        // Check if Agent Mode enabled, in active agent view, or if the buffer is empty
+        let in_active_agent_view = self.agent_view_controller.as_ref(ctx).is_active();
+        if FeatureFlag::AgentView.is_enabled() {
+            // Images never start a conversation: they attach only once the user has switched
+            // the input to agent mode (e.g. with Cmd-I), which opens the conversation.
+            return in_active_agent_view;
+        }
+
+        // Check if Agent Mode enabled or if the buffer is empty
         // (if the buffer is empty, we assume that the user wants the images to be attached).
         let ai_input = self.ai_input_model.as_ref(ctx);
         let in_agent_mode = matches!(ai_input.input_type(), InputType::AI);
         let is_buffer_empty = self.buffer_text(ctx).is_empty();
-        let in_active_agent_view = self.agent_view_controller.as_ref(ctx).is_active();
         in_agent_mode || is_buffer_empty || in_active_agent_view
     }
 
@@ -9812,7 +9818,9 @@ impl Input {
         clipboard_content: ClipboardContent,
         ctx: &mut ViewContext<Self>,
     ) -> usize {
-        if self.check_image_limits_for_paste(1, ctx) == 0 {
+        if !self.can_attach_images_on_paste_or_dragdrop(ctx)
+            || self.check_image_limits_for_paste(1, ctx) == 0
+        {
             return 0;
         }
 
@@ -9841,11 +9849,9 @@ impl Input {
             return 0;
         }
 
-        if !self.can_attach_on_filepaths_paste_or_dragdrop(ctx) {
+        if !self.can_attach_images_on_paste_or_dragdrop(ctx) {
             return 0;
         }
-
-        self.maybe_enter_agent_view_for_image_add(ctx);
 
         let num_images_to_attach = self.check_image_limits_for_paste(image_filepaths.len(), ctx);
         if num_images_to_attach == 0 {
@@ -9877,8 +9883,6 @@ impl Input {
         image: ImageData,
         ctx: &mut ViewContext<Self>,
     ) {
-        self.maybe_enter_agent_view_for_image_add(ctx);
-
         // Switch to AI mode with block-level lock, unless already AI-mode-locked
         if !self.is_locked_in_ai_mode(ctx) {
             self.set_input_mode_agent(true, ctx);
@@ -9914,37 +9918,6 @@ impl Input {
         self.editor.update(ctx, |editor, ctx| {
             editor.process_and_attach_images_as_ai_context(1, vec![attached_image], ctx);
         });
-    }
-
-    /// Enters agent view when adding images, unless the CLI agent rich input is
-    /// open (which is already a composer context and doesn't use the agent view),
-    /// Agent View is disabled, we're already in the agent view, or a long running
-    /// command is in progress.
-    fn maybe_enter_agent_view_for_image_add(&mut self, ctx: &mut ViewContext<Self>) {
-        let is_cli_agent_input_open =
-            CLIAgentSessionsModel::as_ref(ctx).is_input_open(self.terminal_view_id);
-        if is_cli_agent_input_open {
-            return;
-        }
-
-        let is_in_long_running_command = self
-            .model
-            .lock()
-            .block_list()
-            .active_block()
-            .is_active_and_long_running();
-        if !FeatureFlag::AgentView.is_enabled()
-            || self.agent_view_controller.as_ref(ctx).is_active()
-            || is_in_long_running_command
-        {
-            return;
-        }
-
-        if let Err(e) = self.agent_view_controller.update(ctx, |controller, ctx| {
-            controller.try_enter_agent_view(None, AgentViewEntryOrigin::ImageAdded, ctx)
-        }) {
-            log::error!("Failed to enter agent view when adding images: {e:?}");
-        }
     }
 
     /// Display an error toast for image paste operation failures.

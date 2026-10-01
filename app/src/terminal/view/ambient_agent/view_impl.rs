@@ -446,16 +446,14 @@ impl TerminalView {
             return;
         };
 
-        // Retag existing non-setup blocks so the harness content passes the agent view filter.
+        // Retag existing non-setup blocks so the harness content belongs to the conversation.
         self.model
             .lock()
             .block_list_mut()
             .attach_non_startup_blocks_to_conversation(vehicle_conversation_id);
 
         // Retag rich content inserted in terminal mode (setup-commands summary, tombstone, …)
-        // so it stays visible under the vehicle conversation. Rich content with
-        // `agent_view_conversation_id == None` is hidden in full-screen agent view by
-        // `RichContentItem::should_hide_for_agent_view_state`.
+        // so it belongs to the vehicle conversation.
         let ids_to_retag: Vec<EntityId> = self
             .rich_content_views
             .iter()

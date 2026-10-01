@@ -44,6 +44,16 @@ use super::{
     block::DirectoryContext, history_model::BlocklistAIHistoryModel, BlocklistAIHistoryEvent,
 };
 
+/// The number of most recent user-executed blocks auto-attached to the next user query.
+const MAX_AUTO_ATTACHED_USER_BLOCKS: usize = 5;
+
+/// Appends `item`, dropping the oldest entries so that at most `max_len` remain.
+fn push_keeping_most_recent<T>(items: &mut Vec<T>, item: T, max_len: usize) {
+    items.push(item);
+    let overflow = items.len().saturating_sub(max_len);
+    items.drain(..overflow);
+}
+
 /// A non-image file picked via the "attach file" button, stored until query submission.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingFile {
@@ -140,9 +150,9 @@ pub struct BlocklistAIContextModel {
 
     agent_view_controller: ModelHandle<AgentViewController>,
 
-    /// Block IDs of user-executed commands to be auto-attached as context.
-    /// When `AgentViewBlockContext` is enabled, completed user commands are tracked here
-    /// and automatically included as context with the next user query.
+    /// Block IDs of user-executed commands to be auto-attached as context, oldest first.
+    /// When `AgentViewBlockContext` is enabled, the most recent completed user commands since the
+    /// last user query are tracked here and automatically included as context with the next one.
     auto_attached_agent_view_user_block_ids: Vec<BlockId>,
 
     /// When true, submitting a prompt while the agent is responding will queue it
@@ -163,7 +173,10 @@ pub fn block_context_from_terminal_model(
 
     // Note, if the user has explicitly asked Agent Mode to include a block as context, we do NOT
     // _force_ secrets to be obfuscated. It will respect the user's settings for secret redaction.
-    let output = block.output_grid().content_summary(5000, 5000, false);
+    // Auto-attached blocks were not chosen by the user, so their secrets are always obfuscated.
+    let output = block
+        .output_grid()
+        .content_summary(5000, 5000, is_auto_attached);
 
     Some(BlockContext {
         id: block_id.clone(),
@@ -199,14 +212,12 @@ impl BlocklistAIContextModel {
                 block_id,
                 ..
             }) => {
-                // If AgentViewBlockContext is enabled and we're in agent view, track user-executed
-                // blocks for auto-attachment as context.
+                // If AgentViewBlockContext is enabled, track user-executed blocks for
+                // auto-attachment as context, whether or not a conversation is active.
                 if FeatureFlag::AgentViewBlockContext.is_enabled()
-                    && me.agent_view_controller.as_ref(ctx).is_fullscreen()
                     && !user_block_completed.was_part_of_agent_interaction
                 {
-                    me.auto_attached_agent_view_user_block_ids
-                        .push(block_id.clone());
+                    me.track_auto_attached_user_block(block_id.clone());
                 }
 
                 // If the block that finished was part of an agent interaction (i.e. LRC finishing),
@@ -279,18 +290,6 @@ impl BlocklistAIContextModel {
             }
         });
 
-        // Clear auto-attached blocks when exiting agent view or switching conversations
-        ctx.subscribe_to_model(&agent_view_controller, |me, event, _ctx| {
-            use super::agent_view::AgentViewControllerEvent;
-            match event {
-                AgentViewControllerEvent::ExitedAgentView { .. }
-                | AgentViewControllerEvent::EnteredAgentView { .. } => {
-                    me.auto_attached_agent_view_user_block_ids.clear();
-                }
-                AgentViewControllerEvent::ExitConfirmed { .. } => {}
-            }
-        });
-
         // In sandboxed/autonomous mode (SDK mode with --sandboxed flag), automatically set
         // conversations to RunToCompletion mode so they don't wait for user confirmation.
         let pending_query_state =
@@ -316,6 +315,16 @@ impl BlocklistAIContextModel {
             auto_attached_agent_view_user_block_ids: Vec::new(),
             queue_next_prompt_enabled: false,
         }
+    }
+
+    /// Adds a completed user block to the auto-attach list, keeping only the most recent
+    /// [`MAX_AUTO_ATTACHED_USER_BLOCKS`] blocks.
+    fn track_auto_attached_user_block(&mut self, block_id: BlockId) {
+        push_keeping_most_recent(
+            &mut self.auto_attached_agent_view_user_block_ids,
+            block_id,
+            MAX_AUTO_ATTACHED_USER_BLOCKS,
+        );
     }
 
     /// Resets the set of blocks to be included as context to an empty list.
@@ -991,3 +1000,7 @@ pub enum BlocklistAIContextEvent {
 impl Entity for BlocklistAIContextModel {
     type Event = BlocklistAIContextEvent;
 }
+
+#[cfg(test)]
+#[path = "context_model_tests.rs"]
+mod tests;

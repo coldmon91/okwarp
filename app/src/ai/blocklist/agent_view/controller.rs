@@ -44,7 +44,8 @@ pub enum ExitAgentViewError {
 /// The display mode for an active agent view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentViewDisplayMode {
-    /// Full-screen agent view (navstack-based).
+    /// Shared agent view: the conversation owns the input while its blocks share the terminal's
+    /// scroll with command blocks. The name is kept from the former full-screen mode.
     FullScreen,
     /// Inline agent view (e.g., for long-running commands).
     Inline,
@@ -163,6 +164,10 @@ pub enum AgentViewEntryOrigin {
     /// Entered agent view by long-running command.
     LongRunningCommand,
 
+    /// Entered the inline agent view to ask a one-shot question about the terminal (cmd-i). The
+    /// terminal stays on screen and the input returns to the terminal once the answer is done.
+    TerminalQuestion,
+
     /// Entered agent view from the onboarding flow.
     Onboarding,
 
@@ -208,9 +213,9 @@ impl AgentViewEntryOrigin {
 
     pub fn should_autotrigger_request(&self) -> AutoTriggerBehavior {
         match self {
-            AgentViewEntryOrigin::Input {
-                was_prompt_autodetected,
-            } if *was_prompt_autodetected => AutoTriggerBehavior::Always,
+            // The conversation opens in the shared scroll without a view switch, so there is
+            // nothing for a second Enter to confirm.
+            AgentViewEntryOrigin::Input { .. } => AutoTriggerBehavior::Always,
             AgentViewEntryOrigin::SlashCommand { trigger } if !trigger.is_keybinding() => {
                 AutoTriggerBehavior::Always
             }
@@ -270,6 +275,18 @@ impl AgentViewState {
     /// Returns `true` if in fullscreen display mode.
     pub fn is_fullscreen(&self) -> bool {
         self.display_mode().is_some_and(|mode| mode.is_fullscreen())
+    }
+
+    /// Returns `true` while a one-shot question about the terminal is open.
+    pub fn is_terminal_question(&self) -> bool {
+        matches!(
+            self,
+            AgentViewState::Active {
+                origin: AgentViewEntryOrigin::TerminalQuestion,
+                display_mode: AgentViewDisplayMode::Inline,
+                ..
+            }
+        )
     }
 
     pub fn fullscreen_conversation_id(&self) -> Option<AIConversationId> {

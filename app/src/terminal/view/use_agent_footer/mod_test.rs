@@ -1,22 +1,11 @@
-use std::rc::Rc;
-
 use session_sharing_protocol::sharer::SessionSourceType;
 use warp_core::settings::Setting as _;
-use warpui::{App, AppContext, SingletonEntity, ViewContext};
+use warpui::{App, SingletonEntity, ViewContext};
 
 use crate::{
     ai::{
-        agent::{
-            conversation::AIConversationId, task::TaskId, AIAgentInput, ServerOutputId,
-            UserQueryMode,
-        },
-        blocklist::{
-            agent_view::AgentViewEntryOrigin,
-            block::cli_controller::UserTakeOverReason,
-            model::{AIBlockModel, AIBlockOutputStatus, AIRequestType, OutputStatusUpdateCallback},
-            AIBlock, ClientIdentifiers,
-        },
-        llms::LLMId,
+        agent::{conversation::AIConversationId, task::TaskId},
+        blocklist::{agent_view::AgentViewEntryOrigin, block::cli_controller::UserTakeOverReason},
     },
     features::FeatureFlag,
     settings::AISettings,
@@ -29,63 +18,7 @@ use crate::{
     test_util::{add_window_with_terminal, terminal::initialize_app_for_terminal_view},
 };
 
-use super::super::{AIBlockMetadata, RichContentMetadata, RichContentType};
 use super::*;
-
-struct PendingAIBlockModel {
-    conversation_id: AIConversationId,
-    input: Vec<AIAgentInput>,
-    model_id: LLMId,
-}
-
-impl PendingAIBlockModel {
-    fn new(conversation_id: AIConversationId, input: Vec<AIAgentInput>) -> Self {
-        Self {
-            conversation_id,
-            input,
-            model_id: LLMId::from("fake-llm"),
-        }
-    }
-}
-
-impl AIBlockModel for PendingAIBlockModel {
-    type View = AIBlock;
-
-    fn status(&self, _app: &AppContext) -> AIBlockOutputStatus {
-        AIBlockOutputStatus::Pending
-    }
-
-    fn server_output_id(&self, _app: &AppContext) -> Option<ServerOutputId> {
-        None
-    }
-
-    fn model_id(&self, _app: &AppContext) -> Option<LLMId> {
-        None
-    }
-
-    fn base_model<'a>(&'a self, _app: &'a AppContext) -> Option<&'a LLMId> {
-        Some(&self.model_id)
-    }
-
-    fn inputs_to_render<'a>(&'a self, _app: &'a AppContext) -> &'a [AIAgentInput] {
-        &self.input
-    }
-
-    fn conversation_id(&self, _app: &AppContext) -> Option<AIConversationId> {
-        Some(self.conversation_id)
-    }
-
-    fn on_updated_output(
-        &self,
-        _callback: OutputStatusUpdateCallback<AIBlock>,
-        _ctx: &mut ViewContext<AIBlock>,
-    ) {
-    }
-
-    fn request_type(&self, _app: &AppContext) -> AIRequestType {
-        AIRequestType::Active
-    }
-}
 
 fn simulate_user_started_long_running_command(view: &mut TerminalView) {
     {
@@ -132,65 +65,6 @@ fn transition_to_user_handoff_state(
     });
 
     conversation_id
-}
-
-fn insert_pending_ai_block(
-    view: &mut TerminalView,
-    conversation_id: AIConversationId,
-    ctx: &mut ViewContext<TerminalView>,
-) {
-    let ai_block_model = Rc::new(PendingAIBlockModel::new(
-        conversation_id,
-        vec![AIAgentInput::UserQuery {
-            query: "help with this running command".to_owned(),
-            context: vec![].into(),
-            static_query_type: None,
-            referenced_attachments: Default::default(),
-            user_query_mode: UserQueryMode::default(),
-            running_command: None,
-            intended_agent: None,
-        }],
-    ));
-    let ai_block = ctx.add_typed_action_view(|ctx| {
-        AIBlock::new(
-            ai_block_model.clone(),
-            view.model.clone(),
-            ClientIdentifiers {
-                client_exchange_id: Default::default(),
-                conversation_id,
-                response_stream_id: None,
-            },
-            view.ai_controller.clone(),
-            view.get_relevant_files_controller.clone(),
-            None,
-            None,
-            view.ai_action_model.clone(),
-            view.ai_context_model.clone(),
-            view.find_model.clone(),
-            view.active_session.clone(),
-            view.ambient_agent_view_model.clone(),
-            &view.cli_subagent_controller,
-            &view.model_events_handle,
-            view.agent_view_controller.clone(),
-            view.view_handle.clone(),
-            view.id(),
-            ctx,
-        )
-    });
-
-    view.insert_rich_content(
-        Some(RichContentType::AIBlock),
-        ai_block.clone(),
-        Some(RichContentMetadata::AIBlock(AIBlockMetadata {
-            exchange_id: Default::default(),
-            conversation_id,
-            ai_block_handle: ai_block,
-        })),
-        RichContentInsertionPosition::Append {
-            insert_below_long_running_block: false,
-        },
-        ctx,
-    );
 }
 
 #[test]
@@ -268,7 +142,11 @@ fn use_agent_footer_renders_for_manual_handoff_when_unfinished_ai_block_remains(
                 .set_agent_interaction_mode_for_agent_monitored_command(&task_id, conversation_id)
                 .expect("tagged-in command should transition to agent-monitored");
 
-            insert_pending_ai_block(view, conversation_id, ctx);
+            view.insert_pending_ai_block_for_test(
+                conversation_id,
+                "help with this running command",
+                ctx,
+            );
             assert!(view.active_ai_block(ctx).is_some());
 
             view.cli_subagent_controller.update(ctx, |controller, ctx| {

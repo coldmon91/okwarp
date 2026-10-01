@@ -1074,13 +1074,7 @@ impl TerminalView {
             FeatureFlag::AgentView
                 .is_enabled()
                 .then_some(conversation_id),
-            FeatureFlag::AgentView.is_enabled()
-                && self
-                    .agent_view_controller
-                    .as_ref(ctx)
-                    .agent_view_state()
-                    .active_conversation_id()
-                    .is_some_and(|id| id == conversation_id),
+            false,
         );
         if let Some(cmd_block_index) = command_block_index {
             self.model

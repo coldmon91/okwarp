@@ -45,6 +45,26 @@ impl TerminalView {
         }
     }
 
+    /// The conversation an agent-mode prompt continues after the user left the agent view: the
+    /// most recent live conversation in this terminal that the user talked to directly.
+    pub(super) fn conversation_to_continue(
+        &self,
+        ctx: &ViewContext<Self>,
+    ) -> Option<AIConversationId> {
+        let history_model = BlocklistAIHistoryModel::handle(ctx).as_ref(ctx);
+        let conversation = history_model.active_conversation(self.view_id)?;
+        let conversation_id = conversation.id();
+        let is_live = history_model
+            .all_live_conversations_for_terminal_view(self.view_id)
+            .any(|live| live.id() == conversation_id);
+        let is_user_conversation = !conversation.is_empty()
+            && !conversation.is_entirely_passive()
+            && !conversation.is_child_agent_conversation()
+            && !conversation.is_orphaned_cli_subagent_conversation()
+            && !conversation.is_viewing_shared_session();
+        (is_live && is_user_conversation).then_some(conversation_id)
+    }
+
     pub fn enter_agent_view_for_new_conversation(
         &mut self,
         initial_prompt: Option<String>,
@@ -333,9 +353,8 @@ impl TerminalView {
         );
     }
 
-    /// Retags the rich content view with the given id so it renders under `conversation_id`'s
-    /// agent view. Updates both the local `rich_content_views` entry and the block list so
-    /// `should_hide_for_agent_view_state` picks up the new association.
+    /// Retags the rich content view with the given id so it belongs to `conversation_id`'s
+    /// agent view. Updates both the local `rich_content_views` entry and the block list.
     pub(super) fn set_rich_content_agent_view_conversation_id(
         &mut self,
         rich_content_view_id: EntityId,

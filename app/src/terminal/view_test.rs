@@ -3352,6 +3352,145 @@ fn exiting_agent_view_removes_empty_conversations() {
 }
 
 #[test]
+fn exiting_shared_agent_view_does_not_insert_entry_block() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        // This origin used to force an entry block on exit.
+        terminal.update(&mut app, |view, ctx| {
+            view.agent_view_controller().update(ctx, |controller, ctx| {
+                controller
+                    .try_enter_agent_view(
+                        None,
+                        AgentViewEntryOrigin::AgentRequestedNewConversation,
+                        ctx,
+                    )
+                    .expect("Should be able to enter agent view")
+            })
+        });
+        terminal.update(&mut app, |view, ctx| {
+            view.agent_view_controller()
+                .update(ctx, |controller, ctx| controller.exit_agent_view(ctx))
+        });
+
+        terminal.read(&app, |view, _| {
+            let has_entry_block = view.rich_content_views.iter().any(|rich_content| {
+                matches!(
+                    rich_content.metadata(),
+                    Some(RichContentMetadata::AgentViewEntry(_))
+                )
+            });
+            assert!(!has_entry_block);
+        });
+    })
+}
+
+#[test]
+fn terminal_question_keeps_screen_and_returns_to_terminal_when_answered() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        let conversation_id = terminal.update(&mut app, |view, ctx| {
+            view.handle_action(&TerminalAction::SetInputModeAgent, ctx);
+            let agent_view_state = view.agent_view_controller().as_ref(ctx).agent_view_state();
+            assert!(agent_view_state.is_terminal_question());
+            agent_view_state
+                .active_conversation_id()
+                .expect("Question should open a conversation")
+        });
+
+        // Nothing covers the terminal: no zero state block and no inline header.
+        terminal.read(&app, |view, _| {
+            assert!(!view.rich_content_views.iter().any(|rich_content| {
+                rich_content.is_agent_view_zero_state()
+                    || rich_content.is_inline_agent_view_header()
+            }));
+        });
+
+        // A finished turn of another conversation does not close the question.
+        terminal.update(&mut app, |view, ctx| {
+            view.finish_terminal_question(AIConversationId::new(), ctx);
+            assert!(view.agent_view_controller().as_ref(ctx).is_active());
+        });
+
+        terminal.update(&mut app, |view, ctx| {
+            view.finish_terminal_question(conversation_id, ctx);
+            assert!(!view.agent_view_controller().as_ref(ctx).is_active());
+        });
+
+        // The next Cmd-I starts a fresh question instead of continuing the previous one.
+        terminal.update(&mut app, |view, ctx| {
+            view.handle_action(&TerminalAction::SetInputModeAgent, ctx);
+            let agent_view_state = view.agent_view_controller().as_ref(ctx).agent_view_state();
+            assert!(agent_view_state.is_terminal_question());
+            assert_ne!(
+                agent_view_state.active_conversation_id(),
+                Some(conversation_id)
+            );
+        });
+    })
+}
+
+#[test]
+fn terminal_question_answer_stays_visible_after_question_closes() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        let answer = terminal.update(&mut app, |view, ctx| {
+            view.handle_action(&TerminalAction::SetInputModeAgent, ctx);
+            let conversation_id = view
+                .agent_view_controller()
+                .as_ref(ctx)
+                .agent_view_state()
+                .active_conversation_id()
+                .expect("Question should open a conversation");
+            let answer =
+                view.insert_pending_ai_block_for_test(conversation_id, "why did it fail?", ctx);
+            view.finish_terminal_question(conversation_id, ctx);
+            answer
+        });
+
+        terminal.read(&app, |view, ctx| {
+            assert!(!view.agent_view_controller().as_ref(ctx).is_active());
+            assert!(!answer.as_ref(ctx).is_hidden(ctx));
+        });
+
+        // The viewport renders the answer once the question has closed. Tests have no layout
+        // pass, so give the answer a laid-out height.
+        terminal.update(&mut app, |view, ctx| {
+            let mut model = view.model.lock();
+            model
+                .block_list_mut()
+                .update_rich_content_heights(&HashMap::from([(answer.id(), 3.)]));
+            let viewport = view.viewport_state(model.block_list(), InputMode::PinnedToBottom, ctx);
+            assert!(viewport.iter().any(|item| matches!(
+                item.block_height_item,
+                BlockHeightItem::RichContent(rich_content) if rich_content.view_id == answer.id()
+            )));
+        });
+
+        // The earlier answer also stays visible while the next question is open.
+        terminal.update(&mut app, |view, ctx| {
+            view.handle_action(&TerminalAction::SetInputModeAgent, ctx);
+        });
+        terminal.read(&app, |view, ctx| {
+            assert!(view
+                .agent_view_controller()
+                .as_ref(ctx)
+                .agent_view_state()
+                .is_terminal_question());
+            assert!(!answer.as_ref(ctx).is_hidden(ctx));
+        });
+    })
+}
+
+#[test]
 fn ctrl_c_exit_agent_view_requires_confirmation() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
@@ -4378,7 +4517,23 @@ fn close_cli_agent_rich_input_with_empty_buffer_stores_no_draft() {
 fn ctrl_c_does_not_accept_prompt_suggestion_banner() {
     App::test((), |mut app| async move {
         initialize_app_for_terminal_view(&mut app);
+        let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
         let terminal = add_window_with_terminal(&mut app, None);
+
+        // Prompt suggestions are only offered inside a conversation.
+        terminal.update(&mut app, |view, ctx| {
+            view.agent_view_controller().update(ctx, |controller, ctx| {
+                controller
+                    .try_enter_agent_view(
+                        None,
+                        AgentViewEntryOrigin::Input {
+                            was_prompt_autodetected: false,
+                        },
+                        ctx,
+                    )
+                    .expect("Should be able to enter agent view")
+            })
+        });
 
         let block_id = terminal.update(&mut app, |view, _ctx| {
             let mut model = view.model.lock();
@@ -4420,6 +4575,50 @@ fn ctrl_c_does_not_accept_prompt_suggestion_banner() {
                 .inline_banners_state
                 .prompt_suggestions_banner
                 .is_some());
+        });
+    })
+}
+
+#[test]
+fn prompt_suggestion_banner_is_not_offered_in_terminal_mode() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let _agent_view_flag = FeatureFlag::AgentView.override_enabled(true);
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        let block_id = terminal.update(&mut app, |view, _ctx| {
+            let mut model = view.model.lock();
+            model.simulate_block("ls", "output");
+            let last_completed_block_index = BlockIndex(model.block_list().blocks().len() - 2);
+            model
+                .block_list()
+                .block_at(last_completed_block_index)
+                .unwrap()
+                .id()
+                .clone()
+        });
+
+        terminal.update(&mut app, |view, ctx| {
+            view.on_legacy_prompt_suggestion_generated(
+                AgentModePromptSuggestion::Success(PromptSuggestion {
+                    id: "suggestion".to_owned(),
+                    label: Some("Do something".to_owned()),
+                    prompt: "Do something".to_owned(),
+                    coding_query_context: None,
+                    static_prompt_suggestion_name: None,
+                    should_start_new_conversation: false,
+                }),
+                block_id,
+                "ls".to_owned(),
+                0,
+                ctx,
+            );
+
+            assert!(view
+                .inline_banners_state
+                .prompt_suggestions_banner
+                .is_none());
+            assert!(!view.agent_view_controller().as_ref(ctx).is_active());
         });
     })
 }

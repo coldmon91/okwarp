@@ -21,6 +21,7 @@ use super::{ConvertToAPITypeError, RequestParams, ResponseStream};
 
 const MAX_CONTEXT_CHARS: usize = 12_000;
 const MAX_BLOCK_OUTPUT_CHARS: usize = 4_000;
+const MIDDLE_TRUNCATION_MARKER: &str = "\n...[truncated]...\n";
 const RESUME_CONVERSATION_PROMPT: &str = "Please continue the conversation from the latest point. If the previous response was interrupted or failed, resume without repeating completed content.";
 
 pub async fn generate_chat_output(
@@ -239,7 +240,8 @@ fn render_user_prompt(
 
     if !rendered_context.is_empty() {
         prompt.push_str("Terminal context:\n");
-        prompt.push_str(&truncate_chars(&rendered_context, MAX_CONTEXT_CHARS));
+        // Keep the tail: the most recent command blocks are rendered last.
+        prompt.push_str(&truncate_middle_chars(&rendered_context, MAX_CONTEXT_CHARS));
         prompt.push_str("\n\n");
     }
 
@@ -280,7 +282,7 @@ fn render_context(context: &[AIAgentContext], running_command: Option<&RunningCo
                     "Completed command:\n$ {}\nExit code: {}\nOutput:\n{}",
                     block.command,
                     block.exit_code,
-                    truncate_chars(&block.output, MAX_BLOCK_OUTPUT_CHARS)
+                    truncate_middle_chars(&block.output, MAX_BLOCK_OUTPUT_CHARS)
                 ));
             }
             AIAgentContext::Git { head, branch } => {
@@ -324,7 +326,7 @@ fn render_context(context: &[AIAgentContext], running_command: Option<&RunningCo
         lines.push(format!(
             "Running command:\n$ {}\nCurrent output:\n{}",
             command.command,
-            truncate_chars(&command.grid_contents, MAX_BLOCK_OUTPUT_CHARS)
+            truncate_middle_chars(&command.grid_contents, MAX_BLOCK_OUTPUT_CHARS)
         ));
     }
 
@@ -339,6 +341,25 @@ fn truncate_chars(text: &str, max_chars: usize) -> String {
     let chars_to_take = max_chars.saturating_sub(15);
     let truncated: String = text.chars().take(chars_to_take).collect();
     format!("{truncated}\n...[truncated]")
+}
+
+/// Truncates `text` to at most `max_chars` characters by dropping its middle. A quarter of the
+/// budget goes to the head and the rest to the tail, where command errors and summaries appear.
+fn truncate_middle_chars(text: &str, max_chars: usize) -> String {
+    let char_count = text.chars().count();
+    if char_count <= max_chars {
+        return text.to_string();
+    }
+
+    let budget = max_chars.saturating_sub(MIDDLE_TRUNCATION_MARKER.chars().count());
+    let head_chars = budget / 4;
+    let tail_chars = budget.saturating_sub(head_chars);
+    let head: String = text.chars().take(head_chars).collect();
+    let tail: String = text
+        .chars()
+        .skip(char_count.saturating_sub(tail_chars))
+        .collect();
+    format!("{head}{MIDDLE_TRUNCATION_MARKER}{tail}")
 }
 
 fn model_for_provider_config(config: &OpenAICompatibleProviderConfig) -> String {
@@ -850,6 +871,38 @@ mod tests {
         assert!(prompt.contains("$ cargo test"));
         assert!(prompt.contains("test result: ok"));
         assert!(prompt.contains("User request:\nWhy did this fail?"));
+    }
+
+    #[test]
+    fn truncate_middle_chars_keeps_short_text_unchanged() {
+        assert_eq!(truncate_middle_chars("short output", 100), "short output");
+    }
+
+    #[test]
+    fn truncate_middle_chars_keeps_head_and_tail_within_budget() {
+        let text = format!("HEAD{}TAIL-ERROR", "x".repeat(10_000));
+
+        let truncated = truncate_middle_chars(&text, MAX_BLOCK_OUTPUT_CHARS);
+
+        assert!(truncated.chars().count() <= MAX_BLOCK_OUTPUT_CHARS);
+        assert!(truncated.starts_with("HEAD"));
+        assert!(truncated.ends_with("TAIL-ERROR"));
+        assert!(truncated.contains(MIDDLE_TRUNCATION_MARKER));
+        let (head, tail) = truncated
+            .split_once(MIDDLE_TRUNCATION_MARKER)
+            .expect("marker should split the output");
+        assert!(tail.chars().count() > head.chars().count() * 2);
+    }
+
+    #[test]
+    fn truncate_middle_chars_counts_multibyte_chars() {
+        let text = "가".repeat(50);
+
+        let truncated = truncate_middle_chars(&text, 30);
+
+        assert!(truncated.chars().count() <= 30);
+        assert!(truncated.starts_with('가'));
+        assert!(truncated.ends_with('가'));
     }
 
     #[test]
